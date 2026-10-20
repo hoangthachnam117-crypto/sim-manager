@@ -170,7 +170,6 @@ const VALID_STATUSES = ['Còn hàng', 'Đã bán', 'Đã giữ'];
 function validateSimInput(data, isUpdate = false) {
   const errors = [];
   const phone = data.phone_number || data.number || data.phone;
-  const simType = data.sim_type || data.type;
 
   if (!isUpdate || phone !== undefined) {
     if (!phone || typeof phone !== 'string' || phone.trim() === '') {
@@ -178,28 +177,10 @@ function validateSimInput(data, isUpdate = false) {
     }
   }
 
-  if (!isUpdate || data.network !== undefined) {
-    if (!data.network || !VALID_NETWORKS.includes(data.network)) {
-      errors.push(`Mạng (network) không hợp lệ. Giá trị cho phép: ${VALID_NETWORKS.join(', ')}`);
-    }
-  }
-
-  if (!isUpdate || simType !== undefined) {
-    if (!simType || !VALID_SIM_TYPES.includes(simType)) {
-      errors.push(`Loại SIM (sim_type) không hợp lệ. Giá trị cho phép: ${VALID_SIM_TYPES.join(', ')}`);
-    }
-  }
-
-  if (!isUpdate || data.price !== undefined) {
+  if (data.price !== undefined) {
     const price = parseInt(data.price);
     if (isNaN(price) || price < 0) {
-      errors.push('Giá (price) phải là số nguyên không âm');
-    }
-  }
-
-  if (data.status !== undefined) {
-    if (!VALID_STATUSES.includes(data.status)) {
-      errors.push(`Trạng thái (status) không hợp lệ. Giá trị cho phép: ${VALID_STATUSES.join(', ')}`);
+      data.price = 0;
     }
   }
 

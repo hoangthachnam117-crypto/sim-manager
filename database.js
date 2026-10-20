@@ -310,27 +310,36 @@ function getSimById(id) {
 /**
  * Tạo SIM mới
  */
-function createSim({ phone_number, network, sim_type, price, status = 'Còn hàng', notes = '' }) {
+function createSim(dataInput) {
+  const phone_number = dataInput.phone_number || dataInput.number || dataInput.phone || '';
+  if (!phone_number) {
+    throw new Error('Số điện thoại là bắt buộc');
+  }
+
   // Kiểm tra trùng số
-  const existing = data.sims.find(s => s.phone_number === phone_number);
+  const existing = data.sims.find(s => s.phone_number === phone_number || (s.number && s.number === phone_number));
   if (existing) {
     throw new Error('UNIQUE constraint failed: Số điện thoại đã tồn tại');
   }
 
-  // Validate enum
-  if (!VALID_NETWORKS.includes(network)) throw new Error('CHECK constraint failed: network');
-  if (!VALID_SIM_TYPES.includes(sim_type)) throw new Error('CHECK constraint failed: sim_type');
-  if (status && !VALID_STATUSES.includes(status)) throw new Error('CHECK constraint failed: status');
+  const network = dataInput.network || 'Viettel';
+  const sim_type = dataInput.sim_type || dataInput.type || 'Số đẹp';
+  const price = parseInt(dataInput.price) || 0;
+  const status = dataInput.status || 'Còn hàng';
+  const notes = dataInput.notes || '';
 
   const now = new Date().toISOString();
   const sim = {
     id: data._meta.next_sim_id++,
     phone_number,
+    number: phone_number,
+    phone: phone_number,
     network,
     sim_type,
-    price: parseInt(price),
-    status: status || 'Còn hàng',
-    notes: notes || '',
+    type: sim_type,
+    price,
+    status,
+    notes,
     created_at: now,
     updated_at: now
   };
@@ -348,23 +357,22 @@ function updateSim(id, updates) {
   if (index === -1) return null;
 
   const existing = data.sims[index];
+  const newPhone = updates.phone_number || updates.number || updates.phone;
 
   // Kiểm tra trùng số (nếu đổi số)
-  if (updates.phone_number && updates.phone_number !== existing.phone_number) {
-    const dup = data.sims.find(s => s.phone_number === updates.phone_number && s.id !== parseInt(id));
+  if (newPhone && newPhone !== existing.phone_number) {
+    const dup = data.sims.find(s => (s.phone_number === newPhone || s.number === newPhone) && s.id !== parseInt(id));
     if (dup) throw new Error('UNIQUE constraint failed: Số điện thoại đã tồn tại');
   }
 
-  // Validate enums nếu có thay đổi
-  if (updates.network && !VALID_NETWORKS.includes(updates.network)) throw new Error('CHECK constraint failed: network');
-  if (updates.sim_type && !VALID_SIM_TYPES.includes(updates.sim_type)) throw new Error('CHECK constraint failed: sim_type');
-  if (updates.status && !VALID_STATUSES.includes(updates.status)) throw new Error('CHECK constraint failed: status');
-
   const updated = {
     ...existing,
-    phone_number: updates.phone_number ?? existing.phone_number,
+    phone_number: newPhone ?? existing.phone_number,
+    number: newPhone ?? existing.phone_number,
+    phone: newPhone ?? existing.phone_number,
     network: updates.network ?? existing.network,
-    sim_type: updates.sim_type ?? existing.sim_type,
+    sim_type: (updates.sim_type || updates.type) ?? existing.sim_type,
+    type: (updates.sim_type || updates.type) ?? existing.sim_type,
     price: updates.price !== undefined ? parseInt(updates.price) : existing.price,
     status: updates.status ?? existing.status,
     notes: updates.notes !== undefined ? updates.notes : existing.notes,
