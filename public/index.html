@@ -131,6 +131,9 @@
                     <button class="btn btn-outline" id="btn-bulk-import" title="Nhập CSV">
                         <i class="fas fa-file-import"></i>
                     </button>
+                    <button class="btn btn-warning" id="btn-quick-add" title="Thêm nhanh & Tự nhận diện đầu số" style="background:#ea8600;color:#fff;border-color:#ea8600">
+                        <i class="fas fa-bolt"></i> <span class="btn-text">Thêm nhanh</span>
+                    </button>
                     <button class="btn btn-primary" id="btn-add-sim">
                         <i class="fas fa-plus"></i> <span class="btn-text">Thêm SIM</span>
                     </button>
@@ -378,7 +381,8 @@
                     <input type="hidden" id="sim-id">
                     <div class="form-group">
                         <label for="sim-number"><i class="fas fa-phone"></i> Số điện thoại <span class="required">*</span></label>
-                        <input type="text" id="sim-number" placeholder="VD: 0912345678" required>
+                        <input type="text" id="sim-number" placeholder="VD: 0912345678" required autocomplete="off">
+                        <small id="sim-auto-detect-hint" style="display:block;margin-top:4px;color:#1a73e8;font-weight:600;min-height:18px;"></small>
                     </div>
                     <div class="form-row">
                         <div class="form-group">
@@ -492,6 +496,47 @@
                 <button class="btn btn-outline" id="modal-delete-cancel">Hủy</button>
                 <button class="btn btn-danger" id="modal-delete-confirm">
                     <i class="fas fa-trash"></i> Xóa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Quick Add Modal -->
+    <div class="modal-overlay hidden" id="modal-quick-add">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3><i class="fas fa-bolt" style="color: #ea8600;"></i> Thêm SIM Nhanh & Tự Nhận Diện Đầu Số</h3>
+                <button class="modal-close" id="modal-quick-add-close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="import-info" style="background: #e8f0fe; border-left: 4px solid #1a73e8; padding: 12px; border-radius: 6px; margin-bottom: 14px;">
+                    <p style="margin: 0 0 6px 0; font-weight: 600; color: #1a73e8;">
+                        <i class="fas fa-magic"></i> Tự động nhận diện Nhà mạng & Loại SIM siêu tốc:
+                    </p>
+                    <p style="margin: 0; font-size: 13px; color: #444; line-height: 1.5;">
+                        Nhập hoặc dán mỗi dòng 1 SIM kèm giá (hỗ trợ cách viết tắt: <code>50tr</code>, <code>12tr5</code>, <code>500k</code>, <code>15000000</code>).<br>
+                        <strong>Ví dụ dán:</strong><br>
+                        <code>0961.888.999 45tr</code><br>
+                        <code>0912345678 12.5tr sảnh tiến</code><br>
+                        <code>0908777777: 150tr</code>
+                    </p>
+                </div>
+                <div class="form-group">
+                    <label for="quick-add-input"><i class="fas fa-paste"></i> Dán danh sách SIM vào đây:</label>
+                    <textarea id="quick-add-input" rows="6" placeholder="0961.888.999 45tr&#10;0912.345.678 12tr&#10;0908.777.777 150tr" style="font-family: monospace; font-size: 14px;"></textarea>
+                </div>
+                <div class="import-preview hidden" id="quick-add-preview" style="margin-top: 15px;">
+                    <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+                        <span style="font-weight: 600;">Nhận diện được: <strong id="quick-add-count" style="color: #1a73e8; font-size: 16px;">0</strong> SIM</span>
+                        <span style="font-size: 12px; color: #666;">(Kiểm tra kỹ trước khi bấm Lưu)</span>
+                    </div>
+                    <div id="quick-add-preview-list" style="max-height: 250px; overflow-y: auto; border: 1px solid #e0e0e0; border-radius: 8px; padding: 6px; background: #fff;"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="modal-quick-add-cancel">Hủy</button>
+                <button class="btn btn-primary" id="btn-do-quick-add" disabled style="background: #34a853; border-color: #34a853;">
+                    <i class="fas fa-check-double"></i> Lưu tất cả vào kho
                 </button>
             </div>
         </div>

@@ -27,6 +27,17 @@
     const SIM_TYPES = ['Số đẹp', 'Phong thủy', 'Lộc phát', 'Thần tài', 'Tam hoa', 'Tứ quý', 'Ngũ quý', 'Lục quý', 'Tiến', 'Đảo', 'Gánh', 'Số VIP', 'Số thường'];
     const STATUSES = ['Còn hàng', 'Đã bán', 'Đã giữ'];
 
+    // Đầu số các nhà mạng Việt Nam
+    const CARRIER_PREFIXES = {
+        'Viettel': ['086', '096', '097', '098', '032', '033', '034', '035', '036', '037', '038', '039'],
+        'Mobifone': ['089', '090', '093', '070', '079', '077', '076', '078'],
+        'Vinaphone': ['088', '091', '094', '083', '084', '085', '081', '082'],
+        'Vietnamobile': ['092', '056', '058', '052'],
+        'Gmobile': ['099', '059'],
+        'Itelecom': ['087'],
+        'Wintel': ['055']
+    };
+
     // =============================================
     // State
     // =============================================
@@ -95,6 +106,145 @@
         return (...args) => {
             clearTimeout(timer);
             timer = setTimeout(() => fn(...args), delay);
+        };
+    }
+
+    // =============================================
+    // Tự động nhận diện Đầu số & Loại SIM & Giá tiền
+    // =============================================
+    function detectCarrier(phone) {
+        if (!phone) return '';
+        const digits = String(phone).replace(/\D/g, '');
+        if (digits.length < 3) return '';
+        const prefix3 = digits.slice(0, 3);
+        for (const [carrier, prefixes] of Object.entries(CARRIER_PREFIXES)) {
+            if (prefixes.includes(prefix3)) return carrier;
+        }
+        return '';
+    }
+
+    function detectSimType(phone) {
+        if (!phone) return 'Số đẹp';
+        const digits = String(phone).replace(/\D/g, '');
+        if (digits.length < 4) return 'Số đẹp';
+
+        const last6 = digits.slice(-6);
+        const last5 = digits.slice(-5);
+        const last4 = digits.slice(-4);
+        const last3 = digits.slice(-3);
+        const last2 = digits.slice(-2);
+
+        // Lục quý
+        if (last6.length === 6 && /^(\d)\1{5}$/.test(last6)) return 'Lục quý';
+        // Ngũ quý
+        if (last5.length === 5 && /^(\d)\1{4}$/.test(last5)) return 'Ngũ quý';
+        // Tứ quý
+        if (last4.length === 4 && /^(\d)\1{3}$/.test(last4)) return 'Tứ quý';
+
+        // Tam hoa kép (ví dụ: 111.222 hoặc 666.888)
+        if (last6.length === 6 && last6[0] === last6[1] && last6[1] === last6[2] && last6[3] === last6[4] && last6[4] === last6[5]) {
+            return 'Tam hoa';
+        }
+
+        // Tam hoa đuôi (ví dụ: 888, 999)
+        if (last3.length === 3 && /^(\d)\1{2}$/.test(last3)) return 'Tam hoa';
+
+        // Lộc phát (đuôi 68, 86, 6868, 8686, 6886)
+        if (digits.endsWith('6868') || digits.endsWith('8686') || digits.endsWith('6886') || last2 === '68' || last2 === '86') {
+            return 'Lộc phát';
+        }
+
+        // Thần tài (đuôi 39, 79, 3979, 7939)
+        if (digits.endsWith('3979') || digits.endsWith('7939') || last2 === '39' || last2 === '79') {
+            return 'Thần tài';
+        }
+
+        // Sảnh tiến (ví dụ: 1234, 4567, 5678, 6789, 345678)
+        if (digits.length >= 4) {
+            let isAscending = true;
+            for (let i = digits.length - 4; i < digits.length - 1; i++) {
+                if (Number(digits[i + 1]) !== Number(digits[i]) + 1) {
+                    isAscending = false;
+                    break;
+                }
+            }
+            if (isAscending) return 'Tiến';
+        }
+
+        // Gánh / Đảo / Lặp (ví dụ 886.688, 52.52.52)
+        if (last4.length === 4 && last4.slice(0, 2) === last4.slice(2, 4)) return 'Đảo';
+        if (last3.length === 3 && last3[0] === last3[2]) return 'Gánh';
+
+        return 'Số đẹp';
+    }
+
+    function parsePriceInput(str) {
+        if (!str) return 0;
+        let s = String(str).toLowerCase().trim().replace(/,/g, '.');
+
+        // 12tr5 -> 12.5tr
+        const tr5Match = s.match(/^(\d+)tr(\d+)$/);
+        if (tr5Match) {
+            return Number(tr5Match[1]) * 1000000 + Number(tr5Match[2]) * 100000;
+        }
+
+        // 45tr, 45 triệu, 45m
+        if (s.includes('tr') || s.includes('triệu') || s.includes('trieu') || s.endsWith('m')) {
+            const num = parseFloat(s.replace(/[^0-9.]/g, ''));
+            return isNaN(num) ? 0 : Math.round(num * 1000000);
+        }
+
+        // 500k, 500 nghìn
+        if (s.includes('k') || s.includes('nghìn') || s.includes('nghin')) {
+            const num = parseFloat(s.replace(/[^0-9.]/g, ''));
+            return isNaN(num) ? 0 : Math.round(num * 1000);
+        }
+
+        // Số thông thường: 15.000.000 hoặc 15000000
+        const clean = s.replace(/[^0-9]/g, '');
+        return Number(clean) || 0;
+    }
+
+    function parseQuickAddLine(line) {
+        line = line.trim();
+        if (!line) return null;
+
+        // Tìm số điện thoại (bắt đầu bằng 0, có 10-11 chữ số)
+        const phoneMatch = line.match(/(0\d{1,3}[\s.]?\d{3}[\s.]?\d{3,4}|0\d{9,10})/);
+        if (!phoneMatch) return null;
+
+        const rawPhone = phoneMatch[0];
+        const cleanPhone = rawPhone.replace(/\D/g, '');
+        if (cleanPhone.length < 10) return null;
+
+        // Phần còn lại của dòng (sau khi bỏ số điện thoại)
+        const rest = line.replace(rawPhone, '').replace(/[-:]/g, ' ').trim();
+
+        // Tìm giá tiền trong phần còn lại
+        let price = 0;
+        let notes = '';
+
+        const priceTokenMatch = rest.match(/(\d+[.,]?\d*\s*(tr|triệu|trieu|m|k|nghìn|nghin)|\d{5,12})/i);
+        if (priceTokenMatch) {
+            price = parsePriceInput(priceTokenMatch[0]);
+            notes = rest.replace(priceTokenMatch[0], '').trim();
+        } else {
+            notes = rest;
+        }
+
+        const network = detectCarrier(cleanPhone) || 'Viettel';
+        const type = detectSimType(cleanPhone);
+
+        return {
+            phone_number: formatPhoneDisplay(cleanPhone),
+            number: formatPhoneDisplay(cleanPhone),
+            raw_phone: cleanPhone,
+            network,
+            type,
+            sim_type: type,
+            price,
+            status: 'Còn hàng',
+            notes
         };
     }
 
@@ -178,7 +328,6 @@
             showLoading();
             const data = await apiRequest(API_BASE);
             const rawSims = Array.isArray(data) ? data : (data.data || data.sims || []);
-            // Chuẩn hóa dữ liệu ngay khi tải về
             state.sims = rawSims.map(s => ({
                 ...s,
                 id: getSimId(s),
@@ -201,31 +350,21 @@
     }
 
     async function createSim(simData) {
-        try {
-            showLoading();
-            const payload = {
-                phone_number: simData.number || simData.phone_number,
-                number: simData.number || simData.phone_number,
-                network: simData.network,
-                sim_type: simData.type || simData.sim_type,
-                type: simData.type || simData.sim_type,
-                price: simData.price,
-                status: simData.status,
-                notes: simData.notes
-            };
-            const result = await apiRequest(API_BASE, {
-                method: 'POST',
-                body: JSON.stringify(payload)
-            });
-            showToast('Thêm SIM thành công!', 'success');
-            await fetchSims();
-            return result;
-        } catch (err) {
-            showToast('Lỗi thêm SIM: ' + err.message, 'error');
-            throw err;
-        } finally {
-            hideLoading();
-        }
+        const payload = {
+            phone_number: simData.number || simData.phone_number,
+            number: simData.number || simData.phone_number,
+            network: simData.network,
+            sim_type: simData.type || simData.sim_type,
+            type: simData.type || simData.sim_type,
+            price: simData.price,
+            status: simData.status,
+            notes: simData.notes
+        };
+        const result = await apiRequest(API_BASE, {
+            method: 'POST',
+            body: JSON.stringify(payload)
+        });
+        return result;
     }
 
     async function updateSim(id, simData) {
@@ -608,7 +747,7 @@
                     <td>
                         <div class="action-btns">
                             <button type="button" class="btn btn-sm btn-outline btn-edit" data-id="${id}" title="Sửa">
-                                <i class="fas fa-edit"></i> Sửa
+                                <i class="fas fa-edit"></i>
                             </button>
                             <button type="button" class="btn btn-sm btn-outline text-danger btn-delete" data-id="${id}" title="Xóa">
                                 <i class="fas fa-trash"></i>
@@ -800,7 +939,7 @@
                 pageItems.forEach(s => {
                     const id = getSimId(s);
                     if (e.target.checked) state.selectedSims.add(id);
-                    else state.selectedSims.delete(id);
+                    else state.delete(id);
                 });
                 renderSimList();
             });
@@ -814,6 +953,32 @@
         const modal = $('#modal-sim');
         const form = $('#sim-form');
 
+        // Lắng nghe gõ số để tự động nhận diện mạng & loại số
+        const numberInput = $('#sim-number');
+        if (numberInput) {
+            numberInput.addEventListener('input', (e) => {
+                const val = e.target.value.trim();
+                const carrier = detectCarrier(val);
+                const type = detectSimType(val);
+
+                if (carrier && $('#sim-network')) {
+                    $('#sim-network').value = carrier;
+                }
+                if (type && $('#sim-type')) {
+                    $('#sim-type').value = type;
+                }
+
+                const hint = $('#sim-auto-detect-hint');
+                if (hint) {
+                    if (carrier || type) {
+                        hint.innerHTML = `<i class="fas fa-magic"></i> Tự nhận: <strong>${carrier || 'Chưa rõ mạng'}</strong> - <span style="color:#2e7d32">${type}</span>`;
+                    } else {
+                        hint.textContent = '';
+                    }
+                }
+            });
+        }
+
         const addBtn = $('#btn-add-sim');
         if (addBtn) {
             addBtn.addEventListener('click', () => {
@@ -821,7 +986,9 @@
                 $('#modal-sim-title').innerHTML = '<i class="fas fa-plus-circle"></i> Thêm SIM mới';
                 if (form) form.reset();
                 $('#sim-status').value = 'Còn hàng';
+                if ($('#sim-auto-detect-hint')) $('#sim-auto-detect-hint').textContent = '';
                 modal.classList.remove('hidden');
+                if (numberInput) numberInput.focus();
             });
         }
 
@@ -836,8 +1003,8 @@
         if (saveBtn) {
             saveBtn.addEventListener('click', async () => {
                 const number = $('#sim-number').value.trim();
-                const network = $('#sim-network').value;
-                const type = $('#sim-type').value;
+                const network = $('#sim-network').value || detectCarrier(number) || 'Viettel';
+                const type = $('#sim-type').value || detectSimType(number) || 'Số đẹp';
                 const price = parseInt($('#sim-price').value) || 0;
                 const status = $('#sim-status').value;
                 const notes = $('#sim-notes').value.trim();
@@ -846,26 +1013,23 @@
                     showToast('Vui lòng nhập số điện thoại', 'warning');
                     return;
                 }
-                if (!network) {
-                    showToast('Vui lòng chọn nhà mạng', 'warning');
-                    return;
-                }
-                if (!type) {
-                    showToast('Vui lòng chọn loại SIM', 'warning');
-                    return;
-                }
 
                 const simData = { number, phone_number: number, network, type, sim_type: type, price, status, notes };
 
                 try {
+                    showLoading();
                     if (state.editTargetId) {
                         await updateSim(state.editTargetId, simData);
                     } else {
                         await createSim(simData);
+                        showToast('Thêm SIM thành công!', 'success');
+                        await fetchSims();
                     }
                     modal.classList.add('hidden');
                 } catch (err) {
-                    // Error shown
+                    showToast('Lỗi: ' + err.message, 'error');
+                } finally {
+                    hideLoading();
                 }
             });
         }
@@ -887,7 +1051,107 @@
         $('#sim-price').value = sim.price || '';
         $('#sim-status').value = sim.status || 'Còn hàng';
         $('#sim-notes').value = sim.notes || '';
+        if ($('#sim-auto-detect-hint')) $('#sim-auto-detect-hint').textContent = '';
         $('#modal-sim').classList.remove('hidden');
+    }
+
+    // =============================================
+    // Quick Add Modal (Thêm nhanh)
+    // =============================================
+    function initQuickAddModal() {
+        const modal = $('#modal-quick-add');
+        const openBtn = $('#btn-quick-add');
+        if (!modal) return;
+
+        if (openBtn) {
+            openBtn.addEventListener('click', () => {
+                $('#quick-add-input').value = '';
+                $('#quick-add-preview').classList.add('hidden');
+                $('#btn-do-quick-add').disabled = true;
+                modal.classList.remove('hidden');
+                setTimeout(() => $('#quick-add-input').focus(), 100);
+            });
+        }
+
+        if ($('#modal-quick-add-close')) $('#modal-quick-add-close').addEventListener('click', () => modal.classList.add('hidden'));
+        if ($('#modal-quick-add-cancel')) $('#modal-quick-add-cancel').addEventListener('click', () => modal.classList.add('hidden'));
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) modal.classList.add('hidden');
+        });
+
+        const textarea = $('#quick-add-input');
+        if (textarea) {
+            textarea.addEventListener('input', debounce(() => {
+                const rawText = textarea.value.trim();
+                if (!rawText) {
+                    $('#quick-add-preview').classList.add('hidden');
+                    $('#btn-do-quick-add').disabled = true;
+                    return;
+                }
+
+                const lines = rawText.split('\n');
+                const parsed = [];
+                const previewContainer = $('#quick-add-preview-list');
+                previewContainer.innerHTML = '';
+
+                lines.forEach((line, idx) => {
+                    const item = parseQuickAddLine(line);
+                    if (item) {
+                        parsed.push(item);
+                        previewContainer.innerHTML += `
+                            <div style="display:flex;justify-content:space-between;align-items:center;padding:8px 10px;border-bottom:1px solid #f0f0f0;font-size:13px;">
+                                <div>
+                                    <strong style="font-size:15px;color:#1a73e8;">${item.phone_number}</strong>
+                                    <span class="badge badge-network" style="margin-left:6px;">${item.network}</span>
+                                    <span class="badge badge-type">${item.type}</span>
+                                    ${item.notes ? `<small style="color:#777;margin-left:6px;">(${item.notes})</small>` : ''}
+                                </div>
+                                <strong style="color:#ea4335;font-size:14px;">${formatPrice(item.price)}</strong>
+                            </div>
+                        `;
+                    } else if (line.trim()) {
+                        previewContainer.innerHTML += `
+                            <div style="padding:6px 10px;color:#d93025;font-size:12px;background:#fce8e6;border-radius:4px;margin-bottom:4px;">
+                                ⚠️ Dòng ${idx + 1}: Không tìm thấy số điện thoại hợp lệ: "${line.trim()}"
+                            </div>
+                        `;
+                    }
+                });
+
+                $('#quick-add-count').textContent = parsed.length;
+                $('#quick-add-preview').classList.remove('hidden');
+                $('#btn-do-quick-add').disabled = parsed.length === 0;
+                modal._parsedQuickSims = parsed;
+            }, 150));
+        }
+
+        const doQuickAddBtn = $('#btn-do-quick-add');
+        if (doQuickAddBtn) {
+            doQuickAddBtn.addEventListener('click', async () => {
+                const sims = modal._parsedQuickSims;
+                if (!sims || sims.length === 0) return;
+
+                try {
+                    showLoading();
+                    let successCount = 0;
+                    for (const sim of sims) {
+                        try {
+                            await createSim(sim);
+                            successCount++;
+                        } catch (e) {
+                            console.warn('Lỗi thêm sim:', sim.phone_number, e.message);
+                        }
+                    }
+                    modal.classList.add('hidden');
+                    showToast(`Đã thêm nhanh ${successCount} SIM vào kho thành công!`, 'success');
+                    await fetchSims();
+                } catch (err) {
+                    showToast('Lỗi khi thêm nhanh SIM: ' + err.message, 'error');
+                } finally {
+                    hideLoading();
+                }
+            });
+        }
     }
 
     // =============================================
@@ -973,13 +1237,18 @@
                         return;
                     }
 
+                    const num = parts[0];
+                    const net = parts[1] || detectCarrier(num) || 'Viettel';
+                    const simType = parts[2] || detectSimType(num) || 'Số đẹp';
+                    const pr = parsePriceInput(parts[3]);
+
                     const sim = {
-                        number: parts[0],
-                        phone_number: parts[0],
-                        network: parts[1],
-                        type: parts[2],
-                        sim_type: parts[2],
-                        price: parseInt(parts[3]) || 0,
+                        number: num,
+                        phone_number: num,
+                        network: net,
+                        type: simType,
+                        sim_type: simType,
+                        price: pr,
                         status: parts[4] || 'Còn hàng',
                         notes: parts[5] || ''
                     };
@@ -1300,6 +1569,7 @@ ${simLines.join('\n')}
         initFilters();
         initViewToggle();
         initSimModal();
+        initQuickAddModal();
         initDeleteModal();
         initImportModal();
         initSelectionActions();
