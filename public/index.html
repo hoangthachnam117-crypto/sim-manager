@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Quản lý SIM - SIM Manager</title>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <!-- Toast Container -->
+    <div id="toast-container"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loading-overlay" class="loading-overlay hidden">
+        <div class="spinner"></div>
+    </div>
+
+    <!-- Desktop Sidebar -->
+    <aside class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <i class="fas fa-sim-card"></i>
+            <span>SIM Manager</span>
+        </div>
+        <nav class="sidebar-nav">
+            <a href="#" class="nav-item active" data-page="dashboard">
+                <i class="fas fa-chart-pie"></i>
+                <span>Tổng quan</span>
+            </a>
+            <a href="#" class="nav-item" data-page="manage">
+                <i class="fas fa-th-list"></i>
+                <span>Quản lý SIM</span>
+            </a>
+            <a href="#" class="nav-item" data-page="zalo">
+                <i class="fas fa-share-alt"></i>
+                <span>Đăng Zalo</span>
+            </a>
+        </nav>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="main-content" id="main-content">
+        <!-- Top Bar (mobile) -->
+        <header class="top-bar">
+            <h1 class="top-bar-title" id="page-title">
+                <i class="fas fa-chart-pie"></i> Tổng quan
+            </h1>
+        </header>
+
+        <!-- ===== PAGE: Dashboard ===== -->
+        <section class="page active" id="page-dashboard">
+            <!-- Stats Cards -->
+            <div class="stats-grid">
+                <div class="stat-card stat-total">
+                    <div class="stat-icon"><i class="fas fa-sim-card"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-total">0</span>
+                        <span class="stat-label">Tổng SIM</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-available">
+                    <div class="stat-icon"><i class="fas fa-check-circle"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-available">0</span>
+                        <span class="stat-label">Còn hàng</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-sold">
+                    <div class="stat-icon"><i class="fas fa-shopping-cart"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-sold">0</span>
+                        <span class="stat-label">Đã bán</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-value-card">
+                    <div class="stat-icon"><i class="fas fa-coins"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-value">0₫</span>
+                        <span class="stat-label">Tổng giá trị</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network Distribution -->
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-chart-pie"></i> Phân bố theo nhà mạng</h2>
+                </div>
+                <div class="card-body">
+                    <div class="donut-chart-container">
+                        <div class="donut-chart" id="network-chart"></div>
+                        <div class="chart-legend" id="network-legend"></div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recent SIMs -->
+            <div class="card">
+                <div class="card-header">
+                    <h2><i class="fas fa-clock"></i> SIM mới thêm gần đây</h2>
+                </div>
+                <div class="card-body">
+                    <div id="recent-sims-list" class="recent-sims-list">
+                        <div class="empty-state">
+                            <i class="fas fa-inbox"></i>
+                            <p>Chưa có SIM nào</p>
+                            <p class="empty-sub">Thêm SIM đầu tiên để bắt đầu</p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- ===== PAGE: Manage SIMs ===== -->
+        <section class="page" id="page-manage">
+            <!-- Toolbar -->
+            <div class="toolbar">
+                <div class="toolbar-left">
+                    <div class="search-box">
+                        <i class="fas fa-search"></i>
+                        <input type="text" id="search-input" placeholder="Tìm theo số...">
+                    </div>
+                </div>
+                <div class="toolbar-right">
+                    <button class="btn btn-outline" id="btn-toggle-view" title="Đổi kiểu hiển thị">
+                        <i class="fas fa-th-large"></i>
+                    </button>
+                    <button class="btn btn-outline" id="btn-filter-toggle" title="Bộ lọc">
+                        <i class="fas fa-filter"></i>
+                    </button>
+                    <button class="btn btn-outline" id="btn-bulk-import" title="Nhập CSV">
+                        <i class="fas fa-file-import"></i>
+                    </button>
+                    <button class="btn btn-primary" id="btn-add-sim">
+                        <i class="fas fa-plus"></i> <span class="btn-text">Thêm SIM</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Filters Panel -->
+            <div class="filters-panel hidden" id="filters-panel">
+                <div class="filters-grid">
+                    <div class="filter-group">
+                        <label>Nhà mạng</label>
+                        <select id="filter-network">
+                            <option value="">Tất cả</option>
+                            <option value="Viettel">Viettel</option>
+                            <option value="Mobifone">Mobifone</option>
+                            <option value="Vinaphone">Vinaphone</option>
+                            <option value="Vietnamobile">Vietnamobile</option>
+                            <option value="Gmobile">Gmobile</option>
+                            <option value="Itelecom">Itelecom</option>
+                            <option value="Reddi">Reddi</option>
+                            <option value="Wintel">Wintel</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Loại SIM</label>
+                        <select id="filter-type">
+                            <option value="">Tất cả</option>
+                            <option value="Số đẹp">Số đẹp</option>
+                            <option value="Phong thủy">Phong thủy</option>
+                            <option value="Lộc phát">Lộc phát</option>
+                            <option value="Thần tài">Thần tài</option>
+                            <option value="Tam hoa">Tam hoa</option>
+                            <option value="Tứ quý">Tứ quý</option>
+                            <option value="Ngũ quý">Ngũ quý</option>
+                            <option value="Lục quý">Lục quý</option>
+                            <option value="Tiến">Tiến</option>
+                            <option value="Đảo">Đảo</option>
+                            <option value="Gánh">Gánh</option>
+                            <option value="Số VIP">Số VIP</option>
+                            <option value="Số thường">Số thường</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Trạng thái</label>
+                        <select id="filter-status">
+                            <option value="">Tất cả</option>
+                            <option value="Còn hàng">Còn hàng</option>
+                            <option value="Đã bán">Đã bán</option>
+                            <option value="Đã giữ">Đã giữ</option>
+                        </select>
+                    </div>
+                    <div class="filter-group">
+                        <label>Giá từ</label>
+                        <input type="number" id="filter-price-min" placeholder="VND">
+                    </div>
+                    <div class="filter-group">
+                        <label>Giá đến</label>
+                        <input type="number" id="filter-price-max" placeholder="VND">
+                    </div>
+                    <div class="filter-group filter-actions">
+                        <button class="btn btn-sm btn-primary" id="btn-apply-filters">
+                            <i class="fas fa-check"></i> Áp dụng
+                        </button>
+                        <button class="btn btn-sm btn-outline" id="btn-clear-filters">
+                            <i class="fas fa-times"></i> Xóa lọc
+                        </button>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Sort Bar -->
+            <div class="sort-bar">
+                <div class="sort-left">
+                    <span class="result-count" id="result-count">0 SIM</span>
+                    <button class="btn btn-sm btn-outline" id="btn-select-all" style="display:none;">
+                        <i class="fas fa-check-double"></i> Chọn tất cả
+                    </button>
+                    <button class="btn btn-sm btn-accent" id="btn-post-selected" style="display:none;">
+                        <i class="fas fa-share-alt"></i> Đăng Zalo (<span id="selected-count">0</span>)
+                    </button>
+                </div>
+                <div class="sort-right">
+                    <label>Sắp xếp:</label>
+                    <select id="sort-select">
+                        <option value="date-desc">Mới nhất</option>
+                        <option value="date-asc">Cũ nhất</option>
+                        <option value="price-asc">Giá tăng</option>
+                        <option value="price-desc">Giá giảm</option>
+                        <option value="number-asc">Số tăng</option>
+                        <option value="number-desc">Số giảm</option>
+                    </select>
+                </div>
+            </div>
+
+            <!-- SIM List (Table view) -->
+            <div class="sim-table-wrapper" id="sim-table-wrapper">
+                <table class="sim-table" id="sim-table">
+                    <thead>
+                        <tr>
+                            <th class="col-check"><input type="checkbox" id="check-all"></th>
+                            <th>Số điện thoại</th>
+                            <th>Nhà mạng</th>
+                            <th>Loại</th>
+                            <th>Giá</th>
+                            <th>Trạng thái</th>
+                            <th>Hành động</th>
+                        </tr>
+                    </thead>
+                    <tbody id="sim-table-body">
+                    </tbody>
+                </table>
+            </div>
+
+            <!-- SIM List (Card view) -->
+            <div class="sim-cards-grid hidden" id="sim-cards-grid">
+            </div>
+
+            <!-- Empty State -->
+            <div class="empty-state hidden" id="manage-empty">
+                <i class="fas fa-sim-card"></i>
+                <p>Chưa có SIM nào</p>
+                <p class="empty-sub">Nhấn "Thêm SIM" để bắt đầu quản lý kho SIM của bạn</p>
+            </div>
+
+            <!-- Pagination -->
+            <div class="pagination" id="pagination"></div>
+        </section>
+
+        <!-- ===== PAGE: Zalo Posts ===== -->
+        <section class="page" id="page-zalo">
+            <div class="zalo-layout">
+                <!-- Template Selector -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-palette"></i> Chọn mẫu bài đăng</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="template-grid">
+                            <div class="template-card active" data-template="single">
+                                <i class="fas fa-mobile-alt"></i>
+                                <span>Đăng đơn lẻ</span>
+                            </div>
+                            <div class="template-card" data-template="list">
+                                <i class="fas fa-list-ol"></i>
+                                <span>Danh sách SIM</span>
+                            </div>
+                            <div class="template-card" data-template="sale">
+                                <i class="fas fa-tags"></i>
+                                <span>Khuyến mãi</span>
+                            </div>
+                            <div class="template-card" data-template="congrats">
+                                <i class="fas fa-trophy"></i>
+                                <span>Chúc mừng khách</span>
+                            </div>
+                            <div class="template-card" data-template="new-arrival">
+                                <i class="fas fa-box-open"></i>
+                                <span>SIM mới về</span>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SIM Picker for Zalo -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-hand-pointer"></i> Chọn SIM</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="zalo-sim-search">
+                            <div class="search-box">
+                                <i class="fas fa-search"></i>
+                                <input type="text" id="zalo-sim-search" placeholder="Tìm SIM...">
+                            </div>
+                        </div>
+                        <div class="zalo-sim-list" id="zalo-sim-list">
+                            <div class="empty-state small">
+                                <i class="fas fa-inbox"></i>
+                                <p>Chưa có SIM nào</p>
+                            </div>
+                        </div>
+                        <div class="zalo-selected-sims" id="zalo-selected-sims"></div>
+                    </div>
+                </div>
+
+                <!-- Sale-specific fields -->
+                <div class="card hidden" id="sale-options-card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-percentage"></i> Tùy chọn khuyến mãi</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="form-group">
+                            <label>Phần trăm giảm giá (%)</label>
+                            <input type="number" id="sale-discount" value="30" min="1" max="99">
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Preview -->
+                <div class="card">
+                    <div class="card-header">
+                        <h2><i class="fas fa-eye"></i> Xem trước bài đăng</h2>
+                    </div>
+                    <div class="card-body">
+                        <div class="post-preview" id="post-preview">
+                            <p class="preview-placeholder">Chọn mẫu và SIM để xem trước bài đăng</p>
+                        </div>
+                        <div class="preview-actions">
+                            <button class="btn btn-primary btn-lg" id="btn-copy-post" disabled>
+                                <i class="fas fa-copy"></i> Sao chép bài đăng
+                            </button>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Bottom Navigation (mobile) -->
+    <nav class="bottom-nav" id="bottom-nav">
+        <a href="#" class="bottom-nav-item active" data-page="dashboard">
+            <i class="fas fa-chart-pie"></i>
+            <span>Tổng quan</span>
+        </a>
+        <a href="#" class="bottom-nav-item" data-page="manage">
+            <i class="fas fa-th-list"></i>
+            <span>Quản lý</span>
+        </a>
+        <a href="#" class="bottom-nav-item" data-page="zalo">
+            <i class="fas fa-share-alt"></i>
+            <span>Đăng Zalo</span>
+        </a>
+    </nav>
+
+    <!-- ===== MODALS ===== -->
+
+    <!-- Add/Edit SIM Modal -->
+    <div class="modal-overlay hidden" id="modal-sim">
+        <div class="modal">
+            <div class="modal-header">
+                <h3 id="modal-sim-title"><i class="fas fa-plus-circle"></i> Thêm SIM mới</h3>
+                <button class="modal-close" id="modal-sim-close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <form id="sim-form">
+                    <input type="hidden" id="sim-id">
+                    <div class="form-group">
+                        <label for="sim-number"><i class="fas fa-phone"></i> Số điện thoại <span class="required">*</span></label>
+                        <input type="text" id="sim-number" placeholder="VD: 0912345678" required>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="sim-network"><i class="fas fa-broadcast-tower"></i> Nhà mạng <span class="required">*</span></label>
+                            <select id="sim-network" required>
+                                <option value="">-- Chọn --</option>
+                                <option value="Viettel">Viettel</option>
+                                <option value="Mobifone">Mobifone</option>
+                                <option value="Vinaphone">Vinaphone</option>
+                                <option value="Vietnamobile">Vietnamobile</option>
+                                <option value="Gmobile">Gmobile</option>
+                                <option value="Itelecom">Itelecom</option>
+                                <option value="Reddi">Reddi</option>
+                                <option value="Wintel">Wintel</option>
+                            </select>
+                        </div>
+                        <div class="form-group">
+                            <label for="sim-type"><i class="fas fa-star"></i> Loại SIM <span class="required">*</span></label>
+                            <select id="sim-type" required>
+                                <option value="">-- Chọn --</option>
+                                <option value="Số đẹp">Số đẹp</option>
+                                <option value="Phong thủy">Phong thủy</option>
+                                <option value="Lộc phát">Lộc phát</option>
+                                <option value="Thần tài">Thần tài</option>
+                                <option value="Tam hoa">Tam hoa</option>
+                                <option value="Tứ quý">Tứ quý</option>
+                                <option value="Ngũ quý">Ngũ quý</option>
+                                <option value="Lục quý">Lục quý</option>
+                                <option value="Tiến">Tiến</option>
+                                <option value="Đảo">Đảo</option>
+                                <option value="Gánh">Gánh</option>
+                                <option value="Số VIP">Số VIP</option>
+                                <option value="Số thường">Số thường</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-row">
+                        <div class="form-group">
+                            <label for="sim-price"><i class="fas fa-tag"></i> Giá (VND) <span class="required">*</span></label>
+                            <input type="number" id="sim-price" placeholder="VD: 1500000" required min="0">
+                        </div>
+                        <div class="form-group">
+                            <label for="sim-status"><i class="fas fa-info-circle"></i> Trạng thái</label>
+                            <select id="sim-status">
+                                <option value="Còn hàng">Còn hàng</option>
+                                <option value="Đã bán">Đã bán</option>
+                                <option value="Đã giữ">Đã giữ</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="form-group">
+                        <label for="sim-notes"><i class="fas fa-sticky-note"></i> Ghi chú</label>
+                        <textarea id="sim-notes" rows="3" placeholder="Ghi chú thêm..."></textarea>
+                    </div>
+                </form>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="modal-sim-cancel">Hủy</button>
+                <button class="btn btn-primary" id="modal-sim-save">
+                    <i class="fas fa-save"></i> Lưu
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Bulk Import Modal -->
+    <div class="modal-overlay hidden" id="modal-import">
+        <div class="modal modal-lg">
+            <div class="modal-header">
+                <h3><i class="fas fa-file-import"></i> Nhập SIM hàng loạt (CSV)</h3>
+                <button class="modal-close" id="modal-import-close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <div class="import-info">
+                    <p><i class="fas fa-info-circle"></i> Dán dữ liệu CSV theo định dạng:</p>
+                    <code>Số điện thoại, Nhà mạng, Loại SIM, Giá, Trạng thái</code>
+                    <p class="import-example">VD: 0912345678, Viettel, Số đẹp, 1500000, Còn hàng</p>
+                </div>
+                <div class="form-group">
+                    <textarea id="import-csv" rows="10" placeholder="Dán dữ liệu CSV vào đây..."></textarea>
+                </div>
+                <div class="import-preview hidden" id="import-preview">
+                    <h4><i class="fas fa-eye"></i> Xem trước (<span id="import-count">0</span> SIM)</h4>
+                    <div class="import-preview-list" id="import-preview-list"></div>
+                </div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="modal-import-cancel">Hủy</button>
+                <button class="btn btn-outline" id="btn-preview-import">
+                    <i class="fas fa-eye"></i> Xem trước
+                </button>
+                <button class="btn btn-primary" id="btn-do-import" disabled>
+                    <i class="fas fa-upload"></i> Nhập dữ liệu
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Delete Confirmation Modal -->
+    <div class="modal-overlay hidden" id="modal-delete">
+        <div class="modal modal-sm">
+            <div class="modal-header modal-header-danger">
+                <h3><i class="fas fa-exclamation-triangle"></i> Xác nhận xóa</h3>
+                <button class="modal-close" id="modal-delete-close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p>Bạn có chắc chắn muốn xóa SIM <strong id="delete-sim-number"></strong>?</p>
+                <p class="text-muted">Hành động này không thể hoàn tác.</p>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="modal-delete-cancel">Hủy</button>
+                <button class="btn btn-danger" id="modal-delete-confirm">
+                    <i class="fas fa-trash"></i> Xóa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+</body>
+</html>
