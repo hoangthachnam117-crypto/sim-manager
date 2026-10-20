@@ -24,8 +24,9 @@ app.use(express.json({ limit: '10mb' }));
 // Parse URL-encoded body
 app.use(express.urlencoded({ extended: true }));
 
-// Phục vụ file tĩnh từ thư mục 'public'
+// Phục vụ file tĩnh từ thư mục 'public' và thư mục gốc
 app.use(express.static(path.join(__dirname, 'public')));
+app.use(express.static(__dirname));
 
 // =============================================
 // Hàm tiện ích & Chuẩn hóa dữ liệu
