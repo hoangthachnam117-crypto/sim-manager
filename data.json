@@ -1,0 +1,211 @@
+{
+  "sims": [
+    {
+      "id": 1,
+      "phone_number": "0961.888.999",
+      "network": "Viettel",
+      "sim_type": "Số VIP",
+      "price": 45000000,
+      "status": "Còn hàng",
+      "notes": "Số cực VIP, tam hoa 888 + lộc phát 999",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 2,
+      "phone_number": "0912.345.678",
+      "network": "Viettel",
+      "sim_type": "Tiến",
+      "price": 12000000,
+      "status": "Còn hàng",
+      "notes": "Dãy số tiến đẹp 345678",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 3,
+      "phone_number": "0987.666.888",
+      "network": "Viettel",
+      "sim_type": "Lộc phát",
+      "price": 28000000,
+      "status": "Đã giữ",
+      "notes": "Lộc phát 888, tam hoa 666",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 4,
+      "phone_number": "0935.111.222",
+      "network": "Mobifone",
+      "sim_type": "Tam hoa",
+      "price": 8500000,
+      "status": "Còn hàng",
+      "notes": "Tam hoa kép 111.222",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 5,
+      "phone_number": "0908.777.777",
+      "network": "Mobifone",
+      "sim_type": "Ngũ quý",
+      "price": 150000000,
+      "status": "Còn hàng",
+      "notes": "Ngũ quý 7 cực hiếm",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 6,
+      "phone_number": "0918.68.68.68",
+      "network": "Vinaphone",
+      "sim_type": "Phong thủy",
+      "price": 35000000,
+      "status": "Còn hàng",
+      "notes": "Phong thủy lộc phát 68 lặp 3 lần",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 7,
+      "phone_number": "0911.222.333",
+      "network": "Vinaphone",
+      "sim_type": "Tam hoa",
+      "price": 6500000,
+      "status": "Đã bán",
+      "notes": "Tam hoa kép đẹp",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 8,
+      "phone_number": "0886.39.39.39",
+      "network": "Vinaphone",
+      "sim_type": "Thần tài",
+      "price": 22000000,
+      "status": "Còn hàng",
+      "notes": "Thần tài 39 lặp 3 cặp",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 9,
+      "phone_number": "0562.888.888",
+      "network": "Vietnamobile",
+      "sim_type": "Lục quý",
+      "price": 85000000,
+      "status": "Còn hàng",
+      "notes": "Lục quý 8 siêu VIP",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 10,
+      "phone_number": "0563.79.79.79",
+      "network": "Vietnamobile",
+      "sim_type": "Phong thủy",
+      "price": 15000000,
+      "status": "Còn hàng",
+      "notes": "Phong thủy 79 thất cửu",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 11,
+      "phone_number": "0593.456.789",
+      "network": "Gmobile",
+      "sim_type": "Tiến",
+      "price": 3200000,
+      "status": "Còn hàng",
+      "notes": "Dãy tiến 456789",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 12,
+      "phone_number": "087.111.1111",
+      "network": "Itelecom",
+      "sim_type": "Tứ quý",
+      "price": 18000000,
+      "status": "Đã giữ",
+      "notes": "Tứ quý 1 đuôi, tam hoa 1 đầu",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 13,
+      "phone_number": "0557.886.688",
+      "network": "Reddi",
+      "sim_type": "Lộc phát",
+      "price": 4500000,
+      "status": "Còn hàng",
+      "notes": "Lộc phát 688, đảo 886",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 14,
+      "phone_number": "0559.123.456",
+      "network": "Wintel",
+      "sim_type": "Tiến",
+      "price": 2800000,
+      "status": "Còn hàng",
+      "notes": "Tiến đơn giản 123456",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 15,
+      "phone_number": "0978.52.52.52",
+      "network": "Viettel",
+      "sim_type": "Số đẹp",
+      "price": 9800000,
+      "status": "Còn hàng",
+      "notes": "Số đẹp lặp 52 ba lần",
+      "created_at": "2026-10-20T07:41:18.353Z",
+      "updated_at": "2026-10-20T07:41:18.353Z"
+    }
+  ],
+  "templates": [
+    {
+      "id": 1,
+      "name": "Đăng đơn lẻ",
+      "description": "Đăng bài giới thiệu một SIM duy nhất với đầy đủ thông tin",
+      "template_text": "🔥🔥🔥 SIM SỐ ĐẸP 🔥🔥🔥\n━━━━━━━━━━━━━━━\n📱 Số: {{phone_number}}\n🏷️ Nhà mạng: {{network}}\n✨ Loại: {{sim_type}}\n💰 Giá: {{price}}\n{{#notes}}📝 {{notes}}{{/notes}}\n━━━━━━━━━━━━━━━\n✅ Cam kết chính chủ\n✅ Hỗ trợ sang tên toàn quốc\n✅ Ship COD toàn quốc\n\n📞 Liên hệ ngay để sở hữu!\n👉 Inbox hoặc gọi trực tiếp\n#SIMsốđẹp #{{network_tag}} #SIMgiárẻ",
+      "created_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 2,
+      "name": "Danh sách SIM",
+      "description": "Đăng danh sách nhiều SIM dạng bảng đẹp mắt",
+      "template_text": "📋 DANH SÁCH SIM SỐ ĐẸP 📋\n━━━━━━━━━━━━━━━━━━\n{{#sim_list}}\n{{index}}️⃣ {{phone_number}} | {{network}} | 💰 {{price}}\n{{/sim_list}}\n━━━━━━━━━━━━━━━━━━\n📌 Tổng: {{total_count}} SIM\n💎 Giá từ: {{min_price}} - {{max_price}}\n\n✅ Tất cả SIM đều chính chủ\n✅ Hỗ trợ sang tên nhanh chóng\n✅ Ship COD - Nhận hàng thanh toán\n\n📞 Inbox ngay để chọn số ưng ý!\n#simso #simdep #sodep",
+      "created_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 3,
+      "name": "Khuyến mãi giảm giá",
+      "description": "Bài đăng khuyến mãi, giảm giá SIM",
+      "template_text": "🎉🎉 KHUYẾN MÃI SỐC 🎉🎉\n━━━━━━━━━━━━━━━━━━\n🔥 GIẢM GIÁ CỰC SỐC!\n⏰ Chỉ trong hôm nay!\n\n{{#sim_list}}\n📱 {{phone_number}} ({{network}})\n   💰 Giá gốc: {{price}}\n   🏷️ Giá KM: {{discounted_price}}\n   🔖 Tiết kiệm: {{savings}}\n{{/sim_list}}\n\n⚡ SỐ LƯỢNG CÓ HẠN!\n✅ Cam kết giá tốt nhất\n✅ Chính chủ - sang tên ngay\n✅ Freeship toàn quốc\n\n📞 Liên hệ ngay kẻo hết!\n#khuyenmai #giamgia #simso #simdep",
+      "created_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 4,
+      "name": "Chúc mừng khách mua",
+      "description": "Bài đăng cảm ơn và chúc mừng khách hàng đã mua SIM",
+      "template_text": "🎊🎊 CHÚC MỪNG 🎊🎊\n━━━━━━━━━━━━━━━\n✅ SIM {{phone_number}} đã có chủ mới!\n🙏 Cảm ơn quý khách đã tin tưởng\n📱 Chúc quý khách may mắn, phát tài!\n━━━━━━━━━━━━━━━\n💎 Còn nhiều SIM đẹp khác\n👉 Inbox ngay để chọn số!\n#simso #simdep #khachhang #review",
+      "created_at": "2026-10-20T07:41:18.353Z"
+    },
+    {
+      "id": 5,
+      "name": "SIM mới về",
+      "description": "Thông báo có SIM mới về kho, thu hút khách hàng",
+      "template_text": "🆕🆕 SIM MỚI VỀ KHO 🆕🆕\n━━━━━━━━━━━━━━━━━━\n📢 Vừa nhập thêm lô SIM mới:\n\n{{#sim_list}}\n🔸 {{phone_number}} - {{network}} - {{sim_type}} - 💰 {{price}}\n{{/sim_list}}\n\n🔥 Số lượng có hạn!\n✅ Nguồn SIM uy tín\n✅ Giá cạnh tranh nhất\n✅ Sang tên chính chủ\n✅ Giao SIM tận nơi\n\n📞 Inbox ngay để chọn số đẹp!\n#simmoi #simve #simdep #simso",
+      "created_at": "2026-10-20T07:41:18.353Z"
+    }
+  ],
+  "_meta": {
+    "next_sim_id": 16,
+    "next_template_id": 6,
+    "created_at": "2026-10-20T07:41:18.351Z"
+  }
+}
