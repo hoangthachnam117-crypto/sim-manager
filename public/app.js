@@ -179,28 +179,43 @@
     }
 
     function parsePriceInput(str) {
-        if (!str) return 0;
-        let s = String(str).toLowerCase().trim().replace(/,/g, '.');
+        if (!str && str !== 0) return 0;
+        let s = String(str).toLowerCase().trim();
+        if (!s) return 0;
 
-        // 12tr5 -> 12.5tr
-        const tr5Match = s.match(/^(\d+)tr(\d+)$/);
+        // Bỏ ký tự tiền tệ ở đuôi: đ, vnd, vnđ, d
+        s = s.replace(/(đ|vnd|vnđ|d)$/gi, '').trim();
+
+        // 12tr5, 1tr2, 5tr8 (số triệu + tr + số trăm nghìn)
+        const tr5Match = s.match(/^(\d+)\s*tr\s*(\d+)$/i);
         if (tr5Match) {
-            return Number(tr5Match[1]) * 1000000 + Number(tr5Match[2]) * 100000;
+            const million = Number(tr5Match[1]);
+            const frac = tr5Match[2];
+            const decimal = parseFloat(`${million}.${frac}`);
+            return isNaN(decimal) ? 0 : Math.round(decimal * 1000000);
         }
 
-        // 45tr, 45 triệu, 45m
+        // 15tr, 15.5tr, 15,5tr, 45 triệu, 45m
         if (s.includes('tr') || s.includes('triệu') || s.includes('trieu') || s.endsWith('m')) {
-            const num = parseFloat(s.replace(/[^0-9.]/g, ''));
+            const clean = s.replace(/(tr|triệu|trieu|m)/gi, '').replace(/,/g, '.').trim();
+            const num = parseFloat(clean);
             return isNaN(num) ? 0 : Math.round(num * 1000000);
         }
 
         // 500k, 500 nghìn
         if (s.includes('k') || s.includes('nghìn') || s.includes('nghin')) {
-            const num = parseFloat(s.replace(/[^0-9.]/g, ''));
+            const clean = s.replace(/(k|nghìn|nghin)/gi, '').replace(/,/g, '.').trim();
+            const num = parseFloat(clean);
             return isNaN(num) ? 0 : Math.round(num * 1000);
         }
 
-        // Số thông thường: 15.000.000 hoặc 15000000
+        // Định dạng có dấu chấm hoặc dấu phẩy phân cách: 15.000.000 hoặc 15,000,000
+        if (/\d+([.,]\d{3})+/.test(s)) {
+            const clean = s.replace(/[.,]/g, '');
+            return Number(clean) || 0;
+        }
+
+        // Số thông thường: 15000000
         const clean = s.replace(/[^0-9]/g, '');
         return Number(clean) || 0;
     }
@@ -220,16 +235,13 @@
         // Phần còn lại của dòng (sau khi bỏ số điện thoại)
         const rest = line.replace(rawPhone, '').replace(/[-:]/g, ' ').trim();
 
-        // Tìm giá tiền trong phần còn lại
-        let price = 0;
-        let notes = '';
-
-        const priceTokenMatch = rest.match(/(\d+[.,]?\d*\s*(tr|triệu|trieu|m|k|nghìn|nghin)|\d{5,12})/i);
+        // Tìm giá tiền trong phần còn lại (hỗ trợ 15tr5, 15.000.000, 15tr, 500k, 15000000...)
+        const priceTokenMatch = rest.match(/(\d+\s*tr\s*\d+|\d+[.,]?\d*\s*(tr|triệu|trieu|m|k|nghìn|nghin)|\d{1,3}([.,]\d{3})+|\d{5,12})/i);
         if (priceTokenMatch) {
             price = parsePriceInput(priceTokenMatch[0]);
-            notes = rest.replace(priceTokenMatch[0], '').trim();
+            notes = rest.replace(priceTokenMatch[0], '').replace(/^(giá|gia|g:|-|:)\s*/i, '').trim();
         } else {
-            notes = rest;
+            notes = rest.replace(/^(giá|gia|g:|-|:)\s*/i, '').trim();
         }
 
         const network = detectCarrier(cleanPhone) || 'Viettel';
@@ -1014,6 +1026,32 @@
             });
         }
 
+        // Lắng nghe gõ giá để tự động nhận diện & quy đổi tiền
+        const priceInput = $('#sim-price');
+        if (priceInput) {
+            priceInput.addEventListener('input', (e) => {
+                const val = e.target.value.trim();
+                const priceNum = parsePriceInput(val);
+                const hint = $('#sim-price-hint');
+                if (hint) {
+                    if (val && priceNum > 0) {
+                        hint.innerHTML = `<i class="fas fa-money-bill-wave"></i> = <strong>${formatPrice(priceNum)}</strong>`;
+                    } else if (val) {
+                        hint.textContent = 'VD: 15tr, 12tr5, 500k, 1500000...';
+                    } else {
+                        hint.textContent = '';
+                    }
+                }
+            });
+
+            priceInput.addEventListener('blur', (e) => {
+                const priceNum = parsePriceInput(e.target.value);
+                if (priceNum > 0) {
+                    e.target.value = formatPrice(priceNum).replace('₫', '').trim();
+                }
+            });
+        }
+
         const addBtn = $('#btn-add-sim');
         if (addBtn) {
             addBtn.addEventListener('click', () => {
@@ -1022,6 +1060,7 @@
                 if (form) form.reset();
                 $('#sim-status').value = 'Còn hàng';
                 if ($('#sim-auto-detect-hint')) $('#sim-auto-detect-hint').textContent = '';
+                if ($('#sim-price-hint')) $('#sim-price-hint').textContent = '';
                 modal.classList.remove('hidden');
                 if (numberInput) numberInput.focus();
             });
@@ -1040,7 +1079,7 @@
                 const number = $('#sim-number').value.trim();
                 const network = $('#sim-network').value || detectCarrier(number) || 'Viettel';
                 const type = $('#sim-type').value || detectSimType(number) || 'Số đẹp';
-                const price = parseInt($('#sim-price').value) || 0;
+                const price = parsePriceInput($('#sim-price').value);
                 const status = $('#sim-status').value;
                 const notes = $('#sim-notes').value.trim();
 
@@ -1083,7 +1122,9 @@
         $('#sim-number').value = getSimPhone(sim);
         $('#sim-network').value = sim.network || '';
         $('#sim-type').value = getSimType(sim);
-        $('#sim-price').value = sim.price || '';
+        const pr = sim.price || 0;
+        $('#sim-price').value = formatPrice(pr).replace('₫', '').trim();
+        if ($('#sim-price-hint')) $('#sim-price-hint').innerHTML = `<i class="fas fa-money-bill-wave"></i> = <strong>${formatPrice(pr)}</strong>`;
         $('#sim-status').value = sim.status || 'Còn hàng';
         $('#sim-notes').value = sim.notes || '';
         if ($('#sim-auto-detect-hint')) $('#sim-auto-detect-hint').textContent = '';
