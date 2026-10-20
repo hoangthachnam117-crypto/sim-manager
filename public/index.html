@@ -36,15 +36,25 @@
                 <span>Đăng Zalo</span>
             </a>
         </nav>
+        <div class="sidebar-auth" style="padding: 16px 20px; border-top: 1px solid var(--border-light); margin-top: auto;">
+            <button class="btn btn-sm btn-outline" id="sidebar-btn-auth-mode" style="width: 100%; border-radius: 8px; font-weight: 600; padding: 9px 12px; display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 13px;">
+                <i class="fas fa-key"></i> <span>Chủ Shop Đăng Nhập</span>
+            </button>
+        </div>
     </aside>
 
     <!-- Main Content -->
     <main class="main-content" id="main-content">
-        <!-- Top Bar (mobile) -->
+        <!-- Top Bar -->
         <header class="top-bar">
             <h1 class="top-bar-title" id="page-title">
                 <i class="fas fa-chart-pie"></i> Tổng quan
             </h1>
+            <div class="top-bar-actions" style="margin-left: auto; display: flex; align-items: center; gap: 8px;">
+                <button class="btn btn-sm" id="btn-auth-mode" style="border-radius: 20px; font-weight: 600; padding: 6px 14px; font-size: 13px; display: inline-flex; align-items: center; gap: 6px;">
+                    <i class="fas fa-key"></i> <span>Chủ Shop</span>
+                </button>
+            </div>
         </header>
 
         <!-- ===== PAGE: Dashboard ===== -->
@@ -76,7 +86,21 @@
                     <div class="stat-icon"><i class="fas fa-coins"></i></div>
                     <div class="stat-info">
                         <span class="stat-value" id="stat-value">0₫</span>
-                        <span class="stat-label">Tổng giá trị</span>
+                        <span class="stat-label">Tổng giá trị bán</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-total stat-cost-box" style="border-left: 4px solid #ea8600;">
+                    <div class="stat-icon" style="color: #ea8600;"><i class="fas fa-lock"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-cost">••••••</span>
+                        <span class="stat-label">Tổng vốn nhập (Giá gốc)</span>
+                    </div>
+                </div>
+                <div class="stat-card stat-available stat-profit-box" style="border-left: 4px solid #34a853;">
+                    <div class="stat-icon" style="color: #34a853;"><i class="fas fa-chart-line"></i></div>
+                    <div class="stat-info">
+                        <span class="stat-value" id="stat-profit">••••••</span>
+                        <span class="stat-label">Lợi nhuận dự kiến</span>
                     </div>
                 </div>
             </div>
@@ -122,6 +146,9 @@
                     </div>
                 </div>
                 <div class="toolbar-right">
+                    <button class="btn btn-outline" id="btn-toggle-cost" title="Ẩn/Hiện Giá gốc (Bảo mật cho chủ shop)" style="font-weight: 600;">
+                        <i class="fas fa-eye-slash" id="icon-toggle-cost"></i> <span class="btn-text" id="text-toggle-cost">Giá gốc: Ẩn</span>
+                    </button>
                     <button class="btn btn-outline" id="btn-toggle-view" title="Đổi kiểu hiển thị">
                         <i class="fas fa-th-large"></i>
                     </button>
@@ -240,7 +267,9 @@
                             <th>Số điện thoại</th>
                             <th>Nhà mạng</th>
                             <th>Loại</th>
-                            <th>Giá</th>
+                            <th class="col-cost" style="color: #b78103;"><i class="fas fa-lock"></i> Giá gốc</th>
+                            <th style="color: #1a73e8;"><i class="fas fa-users"></i> Giá CTV</th>
+                            <th style="color: #ea4335;"><i class="fas fa-tag"></i> Giá bán lẻ</th>
                             <th>Trạng thái</th>
                             <th>Hành động</th>
                         </tr>
@@ -336,8 +365,17 @@
 
                 <!-- Preview -->
                 <div class="card">
-                    <div class="card-header">
+                    <div class="card-header" style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px;">
                         <h2><i class="fas fa-eye"></i> Xem trước bài đăng</h2>
+                        <div style="display: flex; align-items: center; gap: 12px; font-size: 13px; background: #f1f3f4; padding: 4px 10px; border-radius: 6px;">
+                            <span style="font-weight: 600; color: #555;"><i class="fas fa-tag"></i> Giá bài:</span>
+                            <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer; margin: 0;">
+                                <input type="radio" name="zalo-price-mode" value="retail" checked> <span style="font-weight: 600; color: #ea4335;">Giá lẻ</span>
+                            </label>
+                            <label style="display: inline-flex; align-items: center; gap: 4px; cursor: pointer; margin: 0;">
+                                <input type="radio" name="zalo-price-mode" value="ctv"> <span style="font-weight: 600; color: #1a73e8;">Giá CTV</span>
+                            </label>
+                        </div>
                     </div>
                     <div class="card-body">
                         <div class="post-preview" id="post-preview">
@@ -423,8 +461,20 @@
                         </div>
                     </div>
                     <div class="form-row">
+                        <div class="form-group" style="background: #fff8e1; padding: 10px; border-radius: 6px; border: 1px dashed #ffa000;">
+                            <label for="sim-cost-price" style="color: #b78103; font-weight: 600;"><i class="fas fa-lock"></i> Giá gốc (Vốn nhập - Chỉ chủ thấy)</label>
+                            <input type="text" id="sim-cost-price" placeholder="VD: 10tr, 10000000..." autocomplete="off">
+                            <small id="sim-cost-price-hint" style="display:block;margin-top:4px;color:#b78103;font-weight:700;min-height:18px;"></small>
+                        </div>
+                        <div class="form-group" style="background: #e8f0fe; padding: 10px; border-radius: 6px; border: 1px solid #d2e3fc;">
+                            <label for="sim-ctv-price" style="color: #1a73e8; font-weight: 600;"><i class="fas fa-users"></i> Giá CTV (Cộng tác viên / Bán sỉ)</label>
+                            <input type="text" id="sim-ctv-price" placeholder="VD: 12tr, 12000000..." autocomplete="off">
+                            <small id="sim-ctv-price-hint" style="display:block;margin-top:4px;color:#1a73e8;font-weight:700;min-height:18px;"></small>
+                        </div>
+                    </div>
+                    <div class="form-row">
                         <div class="form-group">
-                            <label for="sim-price"><i class="fas fa-tag"></i> Giá bán <span class="required">*</span></label>
+                            <label for="sim-price"><i class="fas fa-tag"></i> Giá bán lẻ <span class="required">*</span></label>
                             <input type="text" id="sim-price" placeholder="VD: 15tr, 1500000, 500k..." required autocomplete="off">
                             <small id="sim-price-hint" style="display:block;margin-top:4px;color:#ea4335;font-weight:700;min-height:18px;"></small>
                         </div>
@@ -546,6 +596,32 @@
         </div>
     </div>
 
-    <script src="app.js?v=3.0"></script>
+    <!-- Owner / Admin PIN Login Modal -->
+    <div class="modal-overlay hidden" id="modal-auth">
+        <div class="modal modal-sm">
+            <div class="modal-header" style="background: #f8f9fa;">
+                <h3 style="color: #1a73e8;"><i class="fas fa-shield-alt"></i> Xác thực Chủ Shop</h3>
+                <button class="modal-close" id="modal-auth-close"><i class="fas fa-times"></i></button>
+            </div>
+            <div class="modal-body">
+                <p style="font-size: 14px; color: #555; margin-bottom: 16px; line-height: 1.5;">
+                    Vui lòng nhập <strong>mã PIN Chủ Shop</strong> để mở khóa xem <strong>Giá gốc</strong>, báo cáo lợi nhuận và các tính năng quản lý:
+                </p>
+                <div class="form-group" style="margin-bottom: 8px;">
+                    <input type="password" id="input-admin-pin" placeholder="••••" maxlength="10" autocomplete="off"
+                        style="font-size: 24px; text-align: center; letter-spacing: 8px; font-weight: 700; padding: 12px; border: 2px solid #1a73e8; border-radius: 8px; width: 100%;">
+                </div>
+                <div id="auth-error-msg" style="color: #ea4335; font-size: 13px; font-weight: 600; text-align: center; min-height: 20px; margin-top: 6px;"></div>
+            </div>
+            <div class="modal-footer">
+                <button class="btn btn-outline" id="modal-auth-cancel">Hủy</button>
+                <button class="btn btn-primary" id="btn-submit-auth" style="min-width: 100px;">
+                    <i class="fas fa-unlock-alt"></i> Mở khóa
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <script src="app.js?v=3.1"></script>
 </body>
 </html>

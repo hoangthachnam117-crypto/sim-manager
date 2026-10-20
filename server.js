@@ -29,6 +29,36 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use(express.static(__dirname));
 
 // =============================================
+// Xác thực Chủ Shop (Mã PIN: 1102) & Bảo vệ Giá gốc
+// =============================================
+const ADMIN_PIN = process.env.ADMIN_PIN || '1102';
+
+function checkIsAdmin(req) {
+  const pin = req.headers['x-admin-pin'] || req.query.admin_pin || req.query.pin;
+  return pin === ADMIN_PIN;
+}
+
+function redactSimForGuest(sim) {
+  if (!sim) return sim;
+  const clone = { ...sim };
+  delete clone.cost_price;
+  delete clone.gia_goc;
+  return clone;
+}
+
+/**
+ * POST /api/auth/verify
+ * Kiểm tra mã PIN Chủ Shop
+ */
+app.post('/api/auth/verify', (req, res) => {
+  const { pin } = req.body;
+  if (pin === ADMIN_PIN) {
+    return res.json({ success: true, message: 'Xác thực quyền Chủ Shop thành công!' });
+  }
+  return res.status(401).json({ success: false, error: 'Mã PIN Chủ Shop không chính xác' });
+});
+
+// =============================================
 // Hàm tiện ích & Chuẩn hóa dữ liệu
 // =============================================
 
@@ -36,13 +66,22 @@ function normalizeSim(sim) {
   if (!sim) return sim;
   const phone = sim.phone_number || sim.number || sim.phone || '';
   const type = sim.sim_type || sim.type || '';
+  const price = parseInt(sim.price || sim.gia_ban) || 0;
+  const cost_price = parseInt(sim.cost_price || sim.gia_goc) || 0;
+  const ctv_price = parseInt(sim.ctv_price || sim.gia_ctv) || 0;
   return {
     ...sim,
     phone_number: phone,
     number: phone,
     phone: phone,
     sim_type: type,
-    type: type
+    type: type,
+    cost_price,
+    gia_goc: cost_price,
+    ctv_price,
+    gia_ctv: ctv_price,
+    price,
+    gia_ban: price
   };
 }
 
@@ -195,13 +234,19 @@ function validateSimInput(data, isUpdate = false) {
 /**
  * GET /api/sims
  * Lấy danh sách SIM với bộ lọc, phân trang và sắp xếp
+ * Nếu là CTV/Khách: xóa hoàn toàn trường Giá gốc khỏi dữ liệu
  */
 app.get('/api/sims', (req, res) => {
   try {
+    const isAdmin = checkIsAdmin(req);
     const result = database.getSims(req.query);
-    const normalizedData = (result.data || []).map(normalizeSim);
+    const normalizedData = (result.data || []).map(s => {
+      const norm = normalizeSim(s);
+      return isAdmin ? norm : redactSimForGuest(norm);
+    });
     res.json({
       success: true,
+      is_admin: isAdmin,
       ...result,
       data: normalizedData
     });
@@ -214,15 +259,26 @@ app.get('/api/sims', (req, res) => {
 /**
  * GET /api/sims/stats
  * Lấy thống kê tổng quan cho dashboard
+ * Nếu là CTV/Khách: giấu tổng vốn và lợi nhuận
  */
 app.get('/api/sims/stats', (req, res) => {
   try {
-    const stats = database.getStats();
+    const isAdmin = checkIsAdmin(req);
+    const stats = { ...database.getStats() };
+    if (!isAdmin) {
+      delete stats.total_cost;
+      delete stats.expected_profit;
+      delete stats.realized_profit;
+    }
     if (stats && stats.recent_sims) {
-      stats.recent_sims = stats.recent_sims.map(normalizeSim);
+      stats.recent_sims = stats.recent_sims.map(s => {
+        const norm = normalizeSim(s);
+        return isAdmin ? norm : redactSimForGuest(norm);
+      });
     }
     res.json({
       success: true,
+      is_admin: isAdmin,
       data: stats
     });
   } catch (err) {
@@ -237,11 +293,13 @@ app.get('/api/sims/stats', (req, res) => {
  */
 app.get('/api/sims/:id', (req, res) => {
   try {
+    const isAdmin = checkIsAdmin(req);
     const sim = database.getSimById(parseInt(req.params.id));
     if (!sim) {
       return res.status(404).json({ success: false, error: 'Không tìm thấy SIM' });
     }
-    res.json({ success: true, data: normalizeSim(sim) });
+    const norm = normalizeSim(sim);
+    res.json({ success: true, is_admin: isAdmin, data: isAdmin ? norm : redactSimForGuest(norm) });
   } catch (err) {
     console.error('❌ Lỗi lấy thông tin SIM:', err.message);
     res.status(500).json({ success: false, error: 'Lỗi server' });
@@ -250,10 +308,14 @@ app.get('/api/sims/:id', (req, res) => {
 
 /**
  * POST /api/sims
- * Tạo SIM mới
+ * Tạo SIM mới (Chỉ Chủ Shop)
  */
 app.post('/api/sims', (req, res) => {
   try {
+    if (!checkIsAdmin(req)) {
+      return res.status(403).json({ success: false, error: 'Chỉ Chủ Shop (Mã PIN: 1102) mới có quyền thêm SIM' });
+    }
+
     const errors = validateSimInput(req.body);
     if (errors.length > 0) {
       return res.status(400).json({ success: false, errors });
@@ -263,7 +325,9 @@ app.post('/api/sims', (req, res) => {
       phone_number: req.body.phone_number || req.body.number || req.body.phone,
       network: req.body.network,
       sim_type: req.body.sim_type || req.body.type,
-      price: req.body.price,
+      cost_price: req.body.cost_price || req.body.gia_goc || 0,
+      ctv_price: req.body.ctv_price || req.body.gia_ctv || 0,
+      price: req.body.price || req.body.gia_ban || 0,
       status: req.body.status,
       notes: req.body.notes
     };
@@ -288,10 +352,14 @@ app.post('/api/sims', (req, res) => {
 
 /**
  * PUT /api/sims/:id
- * Cập nhật thông tin SIM
+ * Cập nhật thông tin SIM (Chỉ Chủ Shop)
  */
 app.put('/api/sims/:id', (req, res) => {
   try {
+    if (!checkIsAdmin(req)) {
+      return res.status(403).json({ success: false, error: 'Chỉ Chủ Shop (Mã PIN: 1102) mới có quyền chỉnh sửa SIM' });
+    }
+
     const id = parseInt(req.params.id);
 
     const errors = validateSimInput(req.body, true);
@@ -303,7 +371,9 @@ app.put('/api/sims/:id', (req, res) => {
       phone_number: req.body.phone_number || req.body.number || req.body.phone,
       network: req.body.network,
       sim_type: req.body.sim_type || req.body.type,
-      price: req.body.price,
+      cost_price: req.body.cost_price || req.body.gia_goc || 0,
+      ctv_price: req.body.ctv_price || req.body.gia_ctv || 0,
+      price: req.body.price || req.body.gia_ban || 0,
       status: req.body.status,
       notes: req.body.notes
     };
@@ -332,10 +402,14 @@ app.put('/api/sims/:id', (req, res) => {
 
 /**
  * DELETE /api/sims/:id
- * Xóa SIM
+ * Xóa SIM (Chỉ Chủ Shop)
  */
 app.delete('/api/sims/:id', (req, res) => {
   try {
+    if (!checkIsAdmin(req)) {
+      return res.status(403).json({ success: false, error: 'Chỉ Chủ Shop (Mã PIN: 1102) mới có quyền xóa SIM' });
+    }
+
     const id = parseInt(req.params.id);
     const deleted = database.deleteSim(id);
 
@@ -355,10 +429,14 @@ app.delete('/api/sims/:id', (req, res) => {
 
 /**
  * POST /api/sims/bulk-delete
- * Xóa hàng loạt SIM theo danh sách ID
+ * Xóa hàng loạt SIM theo danh sách ID (Chỉ Chủ Shop)
  */
 app.post('/api/sims/bulk-delete', (req, res) => {
   try {
+    if (!checkIsAdmin(req)) {
+      return res.status(403).json({ success: false, error: 'Chỉ Chủ Shop (Mã PIN: 1102) mới có quyền xóa SIM' });
+    }
+
     const { ids } = req.body;
     if (!ids || !Array.isArray(ids) || ids.length === 0) {
       return res.status(400).json({ success: false, error: 'Cần chọn ít nhất 1 SIM để xóa' });
@@ -378,12 +456,14 @@ app.post('/api/sims/bulk-delete', (req, res) => {
 
 /**
  * POST /api/sims/bulk
- * Nhập SIM hàng loạt từ dữ liệu CSV
- *
- * Body: { csv: "phone_number,network,sim_type,price,status,notes\n..." }
+ * Nhập SIM hàng loạt từ dữ liệu CSV (Chỉ Chủ Shop)
  */
 app.post('/api/sims/bulk', (req, res) => {
   try {
+    if (!checkIsAdmin(req)) {
+      return res.status(403).json({ success: false, error: 'Chỉ Chủ Shop (Mã PIN: 1102) mới có quyền nhập SIM' });
+    }
+
     const { csv } = req.body;
     if (!csv || typeof csv !== 'string' || csv.trim() === '') {
       return res.status(400).json({ success: false, error: 'Dữ liệu CSV không được để trống' });

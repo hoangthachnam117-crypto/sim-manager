@@ -324,7 +324,9 @@ function createSim(dataInput) {
 
   const network = dataInput.network || 'Viettel';
   const sim_type = dataInput.sim_type || dataInput.type || 'Số đẹp';
-  const price = parseInt(dataInput.price) || 0;
+  const price = parseInt(dataInput.price || dataInput.gia_ban) || 0;
+  const cost_price = parseInt(dataInput.cost_price || dataInput.gia_goc) || 0;
+  const ctv_price = parseInt(dataInput.ctv_price || dataInput.gia_ctv) || 0;
   const status = dataInput.status || 'Còn hàng';
   const notes = dataInput.notes || '';
 
@@ -337,7 +339,12 @@ function createSim(dataInput) {
     network,
     sim_type,
     type: sim_type,
+    cost_price,
+    gia_goc: cost_price,
+    ctv_price,
+    gia_ctv: ctv_price,
     price,
+    gia_ban: price,
     status,
     notes,
     created_at: now,
@@ -365,6 +372,10 @@ function updateSim(id, updates) {
     if (dup) throw new Error('UNIQUE constraint failed: Số điện thoại đã tồn tại');
   }
 
+  const cost_price = updates.cost_price !== undefined ? parseInt(updates.cost_price) : (updates.gia_goc !== undefined ? parseInt(updates.gia_goc) : existing.cost_price || 0);
+  const ctv_price = updates.ctv_price !== undefined ? parseInt(updates.ctv_price) : (updates.gia_ctv !== undefined ? parseInt(updates.gia_ctv) : existing.ctv_price || 0);
+  const price = updates.price !== undefined ? parseInt(updates.price) : (updates.gia_ban !== undefined ? parseInt(updates.gia_ban) : existing.price || 0);
+
   const updated = {
     ...existing,
     phone_number: newPhone ?? existing.phone_number,
@@ -373,7 +384,12 @@ function updateSim(id, updates) {
     network: updates.network ?? existing.network,
     sim_type: (updates.sim_type || updates.type) ?? existing.sim_type,
     type: (updates.sim_type || updates.type) ?? existing.sim_type,
-    price: updates.price !== undefined ? parseInt(updates.price) : existing.price,
+    cost_price,
+    gia_goc: cost_price,
+    ctv_price,
+    gia_ctv: ctv_price,
+    price,
+    gia_ban: price,
     status: updates.status ?? existing.status,
     notes: updates.notes !== undefined ? updates.notes : existing.notes,
     updated_at: new Date().toISOString()
@@ -481,11 +497,14 @@ function getStats() {
 
   // Tổng giá trị kho hàng (SIM còn hàng)
   const available = sims.filter(s => s.status === 'Còn hàng');
-  const inventoryValue = available.reduce((sum, s) => sum + s.price, 0);
+  const inventoryValue = available.reduce((sum, s) => sum + (s.price || 0), 0);
+  const totalCost = available.reduce((sum, s) => sum + (s.cost_price || 0), 0);
+  const expectedProfit = available.reduce((sum, s) => sum + Math.max(0, (s.price || 0) - (s.cost_price || 0)), 0);
 
   // Tổng doanh thu (SIM đã bán)
   const sold = sims.filter(s => s.status === 'Đã bán');
-  const revenue = sold.reduce((sum, s) => sum + s.price, 0);
+  const revenue = sold.reduce((sum, s) => sum + (s.price || 0), 0);
+  const realizedProfit = sold.reduce((sum, s) => sum + Math.max(0, (s.price || 0) - (s.cost_price || 0)), 0);
 
   // Giá cao nhất và thấp nhất (SIM còn hàng)
   const prices = available.map(s => s.price);
@@ -506,6 +525,9 @@ function getStats() {
     by_network: byNetwork,
     by_type: byType,
     inventory_value: inventoryValue,
+    total_cost: totalCost,
+    expected_profit: expectedProfit,
+    realized_profit: realizedProfit,
     revenue,
     price_range: priceRange,
     recent_sims: recentSims

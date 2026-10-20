@@ -46,7 +46,11 @@
         filteredSims: [],
         currentPage: 1,
         viewMode: 'table', // 'table' or 'cards'
+        adminPin: localStorage.getItem('sim_admin_pin') || '',
+        isAdmin: false,
+        showCostPrice: localStorage.getItem('sim_show_cost') === 'true', // Chỉ chủ mới thấy giá gốc
         selectedSims: new Set(),
+        isBulkDelete: false,
         currentSort: 'date-desc',
         filters: {
             search: '',
@@ -58,6 +62,7 @@
         },
         // Zalo
         zaloTemplate: 'single',
+        zaloPriceType: 'retail', // 'retail' (bán lẻ) hoặc 'ctv' (giá CTV)
         zaloSelectedSims: [],
         deleteTargetId: null,
         editTargetId: null
@@ -236,6 +241,9 @@
         const rest = line.replace(rawPhone, '').replace(/[-:]/g, ' ').trim();
 
         // Tìm giá tiền trong phần còn lại (hỗ trợ 15tr5, 15.000.000, 15tr, 500k, 15000000...)
+        let price = 0;
+        let notes = '';
+
         const priceTokenMatch = rest.match(/(\d+\s*tr\s*\d+|\d+[.,]?\d*\s*(tr|triệu|trieu|m|k|nghìn|nghin)|\d{1,3}([.,]\d{3})+|\d{5,12})/i);
         if (priceTokenMatch) {
             price = parsePriceInput(priceTokenMatch[0]);
@@ -254,6 +262,8 @@
             network,
             type,
             sim_type: type,
+            cost_price: 0,
+            ctv_price: 0,
             price,
             status: 'Còn hàng',
             notes
@@ -314,10 +324,14 @@
     // API
     // =============================================
     async function apiRequest(url, options = {}) {
-        const defaults = {
-            headers: { 'Content-Type': 'application/json' }
+        const headers = {
+            'Content-Type': 'application/json',
+            ...(options.headers || {})
         };
-        const config = { ...defaults, ...options };
+        if (state.adminPin) {
+            headers['x-admin-pin'] = state.adminPin;
+        }
+        const config = { ...options, headers };
 
         try {
             const response = await fetch(url, config);
@@ -339,6 +353,10 @@
         try {
             showLoading();
             const data = await apiRequest(API_BASE);
+            if (data && data.is_admin !== undefined) {
+                state.isAdmin = Boolean(data.is_admin);
+                updateAuthUI();
+            }
             const rawSims = Array.isArray(data) ? data : (data.data || data.sims || []);
             state.sims = rawSims.map(s => ({
                 ...s,
@@ -346,7 +364,10 @@
                 number: getSimPhone(s),
                 phone_number: getSimPhone(s),
                 type: getSimType(s),
-                sim_type: getSimType(s)
+                sim_type: getSimType(s),
+                cost_price: Number(s.cost_price || s.gia_goc || 0),
+                ctv_price: Number(s.ctv_price || s.gia_ctv || 0),
+                price: Number(s.price || s.gia_ban || 0)
             }));
             applyFiltersAndSort();
             renderDashboard();
@@ -368,7 +389,12 @@
             network: simData.network,
             sim_type: simData.type || simData.sim_type,
             type: simData.type || simData.sim_type,
-            price: simData.price,
+            cost_price: simData.cost_price || 0,
+            gia_goc: simData.cost_price || 0,
+            ctv_price: simData.ctv_price || 0,
+            gia_ctv: simData.ctv_price || 0,
+            price: simData.price || 0,
+            gia_ban: simData.price || 0,
             status: simData.status,
             notes: simData.notes
         };
@@ -388,7 +414,12 @@
                 network: simData.network,
                 sim_type: simData.type || simData.sim_type,
                 type: simData.type || simData.sim_type,
-                price: simData.price,
+                cost_price: simData.cost_price !== undefined ? simData.cost_price : 0,
+                gia_goc: simData.cost_price !== undefined ? simData.cost_price : 0,
+                ctv_price: simData.ctv_price !== undefined ? simData.ctv_price : 0,
+                gia_ctv: simData.ctv_price !== undefined ? simData.ctv_price : 0,
+                price: simData.price || 0,
+                gia_ban: simData.price || 0,
                 status: simData.status,
                 notes: simData.notes
             };
@@ -500,6 +531,239 @@
             renderZaloSimList();
             generateZaloPreview();
         }
+    }
+
+    // =============================================
+    // Xác thực Chủ Shop (Mã PIN: 1102) & Phân quyền
+    // =============================================
+    function updateAuthUI() {
+        const topBtn = $('#btn-auth-mode');
+        const sidebarBtn = $('#sidebar-btn-auth-mode');
+        const costToggleBtn = $('#btn-toggle-cost');
+        const addSimBtn = $('#btn-add-sim');
+        const quickAddBtn = $('#btn-quick-add');
+        const bulkImportBtn = $('#btn-bulk-import');
+        const costHeader = $('.col-cost');
+        const costStatBoxes = $$('.stat-cost-box, .stat-profit-box');
+
+        if (state.isAdmin) {
+            // Chủ Shop Mode
+            if (topBtn) {
+                topBtn.className = 'btn btn-sm';
+                topBtn.style.background = '#e6f4ea';
+                topBtn.style.color = '#137333';
+                topBtn.style.border = '1px solid #34a853';
+                topBtn.innerHTML = '<i class="fas fa-crown" style="color:#f29900;"></i> <span>Chủ Shop</span> <small style="opacity:0.8;font-size:11px;">(Đăng xuất)</small>';
+                topBtn.title = 'Đang ở quyền Chủ Shop (PIN: 1102). Bấm để thoát về chế độ CTV';
+            }
+            if (sidebarBtn) {
+                sidebarBtn.style.borderColor = '#ea4335';
+                sidebarBtn.style.color = '#ea4335';
+                sidebarBtn.innerHTML = '<i class="fas fa-sign-out-alt"></i> <span>Đăng xuất Chủ Shop</span>';
+                sidebarBtn.title = 'Chuyển về giao diện CTV';
+            }
+            if (costToggleBtn) costToggleBtn.style.display = '';
+            if (addSimBtn) addSimBtn.style.display = '';
+            if (quickAddBtn) quickAddBtn.style.display = '';
+            if (bulkImportBtn) bulkImportBtn.style.display = '';
+            costStatBoxes.forEach(el => el.style.display = '');
+            if (costHeader) costHeader.style.display = state.showCostPrice ? '' : 'none';
+        } else {
+            // CTV Mode (Khách xem & Cộng tác viên)
+            if (topBtn) {
+                topBtn.className = 'btn btn-sm btn-outline';
+                topBtn.style.background = '#fff';
+                topBtn.style.color = '#1a73e8';
+                topBtn.style.border = '1px solid #1a73e8';
+                topBtn.innerHTML = '<i class="fas fa-key"></i> <span>Chủ Shop Đăng Nhập</span>';
+                topBtn.title = 'Chỉ dành cho Chủ Shop (nhập mã PIN 1102)';
+            }
+            if (sidebarBtn) {
+                sidebarBtn.style.borderColor = '#1a73e8';
+                sidebarBtn.style.color = '#1a73e8';
+                sidebarBtn.innerHTML = '<i class="fas fa-key"></i> <span>Chủ Shop Đăng Nhập</span>';
+                sidebarBtn.title = 'Chỉ dành cho Chủ Shop (nhập mã PIN 1102)';
+            }
+            if (costToggleBtn) costToggleBtn.style.display = 'none';
+            if (addSimBtn) addSimBtn.style.display = 'none';
+            if (quickAddBtn) quickAddBtn.style.display = 'none';
+            if (bulkImportBtn) bulkImportBtn.style.display = 'none';
+            costStatBoxes.forEach(el => el.style.display = 'none');
+            if (costHeader) costHeader.style.display = 'none';
+        }
+    }
+
+    function initAuthModal() {
+        const modal = $('#modal-auth');
+        const input = $('#input-admin-pin');
+        const submitBtn = $('#btn-submit-auth');
+        const cancelBtn = $('#modal-auth-cancel');
+        const closeBtn = $('#modal-auth-close');
+        const errorMsg = $('#auth-error-msg');
+        const topBtn = $('#btn-auth-mode');
+        const sidebarBtn = $('#sidebar-btn-auth-mode');
+
+        function openModal() {
+            if (errorMsg) errorMsg.textContent = '';
+            if (input) input.value = '';
+            modal.classList.remove('hidden');
+            setTimeout(() => input && input.focus(), 150);
+        }
+
+        function closeModal() {
+            modal.classList.add('hidden');
+            if (input) input.value = '';
+        }
+
+        function handleAuthButtonClick() {
+            if (state.isAdmin) {
+                if (confirm('Bạn muốn thoát quyền Chủ Shop và xem trang ở chế độ CTV / Khách?')) {
+                    logoutAdmin();
+                }
+            } else {
+                openModal();
+            }
+        }
+
+        if (topBtn) topBtn.addEventListener('click', handleAuthButtonClick);
+        if (sidebarBtn) sidebarBtn.addEventListener('click', handleAuthButtonClick);
+        if (cancelBtn) cancelBtn.addEventListener('click', closeModal);
+        if (closeBtn) closeBtn.addEventListener('click', closeModal);
+        modal.addEventListener('click', (e) => {
+            if (e.target === modal) closeModal();
+        });
+
+        async function doLogin() {
+            const pin = (input ? input.value : '').trim();
+            if (!pin) {
+                if (errorMsg) errorMsg.textContent = 'Vui lòng nhập mã PIN';
+                return;
+            }
+
+            try {
+                showLoading();
+                const res = await fetch('/api/auth/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    state.adminPin = pin;
+                    state.isAdmin = true;
+                    state.showCostPrice = true;
+                    localStorage.setItem('sim_admin_pin', pin);
+                    localStorage.setItem('sim_show_cost', 'true');
+                    closeModal();
+                    updateAuthUI();
+                    showToast('👑 Đăng nhập Chủ Shop thành công! Đã mở khóa Giá gốc & Toàn quyền.', 'success');
+                    await fetchSims();
+                } else {
+                    if (errorMsg) errorMsg.textContent = data.error || 'Mã PIN không chính xác!';
+                    if (input) {
+                        input.select();
+                        input.focus();
+                    }
+                }
+            } catch (err) {
+                if (errorMsg) errorMsg.textContent = 'Lỗi kết nối máy chủ';
+            } finally {
+                hideLoading();
+            }
+        }
+
+        if (submitBtn) submitBtn.addEventListener('click', doLogin);
+        if (input) {
+            input.addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    doLogin();
+                }
+            });
+        }
+    }
+
+    async function logoutAdmin() {
+        state.adminPin = '';
+        state.isAdmin = false;
+        state.showCostPrice = false;
+        localStorage.removeItem('sim_admin_pin');
+        localStorage.setItem('sim_show_cost', 'false');
+        updateAuthUI();
+        showToast('Đã đăng xuất Chủ Shop. Đang ở chế độ CTV / Khách xem.', 'info');
+        await fetchSims();
+    }
+
+    async function checkInitialAuth() {
+        const urlParams = new URLSearchParams(window.location.search);
+        const pinFromUrl = urlParams.get('pin') || urlParams.get('admin_pin');
+        if (pinFromUrl) {
+            localStorage.setItem('sim_admin_pin', pinFromUrl);
+            state.adminPin = pinFromUrl;
+            window.history.replaceState({}, document.title, window.location.pathname);
+        } else {
+            state.adminPin = localStorage.getItem('sim_admin_pin') || '';
+        }
+
+        if (state.adminPin) {
+            try {
+                const res = await fetch('/api/auth/verify', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ pin: state.adminPin })
+                });
+                const data = await res.json();
+                if (data.success) {
+                    state.isAdmin = true;
+                } else {
+                    state.isAdmin = false;
+                    state.adminPin = '';
+                    localStorage.removeItem('sim_admin_pin');
+                }
+            } catch (err) {
+                if (state.adminPin === '1102') {
+                    state.isAdmin = true;
+                }
+            }
+        }
+        updateAuthUI();
+    }
+
+    // =============================================
+    // Ẩn / Hiện Giá Gốc (Bảo mật cho chủ shop)
+    // =============================================
+    function initCostToggle() {
+        const btn = $('#btn-toggle-cost');
+        if (!btn) return;
+
+        function updateBtnUI() {
+            const icon = $('#icon-toggle-cost');
+            const text = $('#text-toggle-cost');
+            if (state.showCostPrice) {
+                if (icon) icon.className = 'fas fa-eye';
+                if (text) text.textContent = 'Giá gốc: Hiện';
+                btn.style.color = '#b78103';
+                btn.style.borderColor = '#ffa000';
+                btn.style.background = '#fff8e1';
+            } else {
+                if (icon) icon.className = 'fas fa-eye-slash';
+                if (text) text.textContent = 'Giá gốc: Ẩn';
+                btn.style.color = '';
+                btn.style.borderColor = '';
+                btn.style.background = '';
+            }
+        }
+
+        updateBtnUI();
+
+        btn.addEventListener('click', () => {
+            state.showCostPrice = !state.showCostPrice;
+            localStorage.setItem('sim_show_cost', state.showCostPrice);
+            updateBtnUI();
+            renderSimList();
+            renderDashboard();
+            showToast(state.showCostPrice ? 'Đã hiện Giá gốc & Lợi nhuận (Chỉ chủ thấy)' : 'Đã ẩn Giá gốc (Chế độ an toàn cho khách xem)', 'info');
+        });
     }
 
     // =============================================
@@ -624,14 +888,25 @@
     function renderDashboard() {
         const sims = state.sims;
         const total = sims.length;
-        const available = sims.filter(s => s.status === 'Còn hàng').length;
+        const availableSims = sims.filter(s => s.status === 'Còn hàng');
+        const available = availableSims.length;
         const sold = sims.filter(s => s.status === 'Đã bán').length;
-        const totalValue = sims.reduce((sum, s) => sum + (s.price || 0), 0);
+        const totalValue = availableSims.reduce((sum, s) => sum + (s.price || 0), 0);
+        const totalCost = availableSims.reduce((sum, s) => sum + (s.cost_price || 0), 0);
+        const expectedProfit = availableSims.reduce((sum, s) => sum + Math.max(0, (s.price || 0) - (s.cost_price || 0)), 0);
 
         if ($('#stat-total')) $('#stat-total').textContent = total;
         if ($('#stat-available')) $('#stat-available').textContent = available;
         if ($('#stat-sold')) $('#stat-sold').textContent = sold;
         if ($('#stat-value')) $('#stat-value').textContent = formatPrice(totalValue);
+
+        // Giá gốc & Lợi nhuận (chỉ tính & hiện khi là Chủ Shop)
+        if ($('#stat-cost')) {
+            $('#stat-cost').textContent = (state.isAdmin && state.showCostPrice) ? formatPrice(totalCost) : '••••••';
+        }
+        if ($('#stat-profit')) {
+            $('#stat-profit').textContent = (state.isAdmin && state.showCostPrice) ? formatPrice(expectedProfit) : '••••••';
+        }
 
         renderNetworkChart();
         renderRecentSims();
@@ -725,10 +1000,16 @@
 
         if ($('#result-count')) $('#result-count').textContent = `${total} SIM`;
 
+        // Ẩn/Hiện cột Giá gốc trên tiêu đề bảng
+        const costHeader = $('.col-cost');
+        if (costHeader) {
+            costHeader.style.display = (state.isAdmin && state.showCostPrice) ? '' : 'none';
+        }
+
         const hasSelection = state.selectedSims.size > 0;
         if ($('#btn-select-all')) $('#btn-select-all').style.display = total > 0 ? '' : 'none';
         if ($('#btn-post-selected')) $('#btn-post-selected').style.display = hasSelection ? '' : 'none';
-        if ($('#btn-delete-selected')) $('#btn-delete-selected').style.display = hasSelection ? '' : 'none';
+        if ($('#btn-delete-selected')) $('#btn-delete-selected').style.display = (state.isAdmin && hasSelection) ? '' : 'none';
         if ($('#selected-count')) $('#selected-count').textContent = state.selectedSims.size;
         if ($('#delete-selected-count')) $('#delete-selected-count').textContent = state.selectedSims.size;
 
@@ -762,10 +1043,39 @@
 
         tbody.innerHTML = items.map(sim => {
             const id = getSimId(sim);
-            const phone = formatPhoneDisplay(getSimPhone(sim));
+            const rawPhone = getSimPhone(sim);
+            const phone = formatPhoneDisplay(rawPhone);
             const checked = state.selectedSims.has(id) ? 'checked' : '';
             const selectedClass = state.selectedSims.has(id) ? 'selected' : '';
             const statusBadge = getStatusBadgeClass(sim.status);
+
+            const costDisplay = (state.isAdmin && state.showCostPrice)
+                ? `<span style="color:#b78103;font-weight:600;">${formatPrice(sim.cost_price || 0)}</span>`
+                : `<span style="letter-spacing:2px;color:#bbb;">••••••</span>`;
+            
+            const costTd = state.isAdmin ? `
+                <td class="col-cost" style="background:${state.showCostPrice ? '#fffde7' : ''}; display:${state.showCostPrice ? '' : 'none'};">${costDisplay}</td>
+            ` : '';
+
+            const ctvDisplay = `<span style="color:#1a73e8;font-weight:600;">${formatPrice(sim.ctv_price || 0)}</span>`;
+            const retailDisplay = `<strong style="color:#ea4335;">${formatPrice(sim.price || 0)}</strong>`;
+
+            const actionBtns = state.isAdmin ? `
+                <div class="action-btns">
+                    <button type="button" class="btn btn-sm btn-outline btn-edit" data-id="${id}" title="Sửa SIM">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline text-danger btn-delete" data-id="${id}" title="Xóa SIM">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            ` : `
+                <div class="action-btns">
+                    <button type="button" class="btn btn-sm btn-outline btn-copy-sim" data-phone="${rawPhone}" title="Sao chép số điện thoại">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+            `;
 
             return `
                 <tr class="${selectedClass}" data-id="${id}">
@@ -775,18 +1085,11 @@
                     <td class="sim-number-cell"><strong>${phone}</strong></td>
                     <td><span class="badge badge-network">${sim.network || ''}</span></td>
                     <td><span class="badge badge-type">${getSimType(sim)}</span></td>
-                    <td class="sim-price-cell">${formatPrice(sim.price)}</td>
+                    ${costTd}
+                    <td style="background:#f8fbff;">${ctvDisplay}</td>
+                    <td class="sim-price-cell">${retailDisplay}</td>
                     <td><span class="badge ${statusBadge}">${sim.status || ''}</span></td>
-                    <td>
-                        <div class="action-btns">
-                            <button type="button" class="btn btn-sm btn-outline btn-edit" data-id="${id}" title="Sửa">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline text-danger btn-delete" data-id="${id}" title="Xóa">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
-                    </td>
+                    <td>${actionBtns}</td>
                 </tr>
             `;
         }).join('');
@@ -805,8 +1108,11 @@
                     if (e.target.checked) row.classList.add('selected');
                     else row.classList.remove('selected');
                 }
-                if ($('#btn-post-selected')) $('#btn-post-selected').style.display = state.selectedSims.size > 0 ? '' : 'none';
+                const hasSelection = state.selectedSims.size > 0;
+                if ($('#btn-post-selected')) $('#btn-post-selected').style.display = hasSelection ? '' : 'none';
+                if ($('#btn-delete-selected')) $('#btn-delete-selected').style.display = (state.isAdmin && hasSelection) ? '' : 'none';
                 if ($('#selected-count')) $('#selected-count').textContent = state.selectedSims.size;
+                if ($('#delete-selected-count')) $('#delete-selected-count').textContent = state.selectedSims.size;
             });
         });
 
@@ -825,6 +1131,20 @@
                 openDeleteModal(btn.dataset.id);
             });
         });
+
+        // Copy button for CTV
+        tbody.querySelectorAll('.btn-copy-sim').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const phone = btn.dataset.phone;
+                navigator.clipboard.writeText(phone.replace(/\D/g, '')).then(() => {
+                    showToast(`Đã sao chép: ${formatPhoneDisplay(phone)}`, 'success');
+                }).catch(() => {
+                    showToast(`Số: ${phone}`, 'info');
+                });
+            });
+        });
     }
 
     function renderCards(items) {
@@ -833,10 +1153,31 @@
 
         grid.innerHTML = items.map(sim => {
             const id = getSimId(sim);
-            const phone = formatPhoneDisplay(getSimPhone(sim));
+            const rawPhone = getSimPhone(sim);
+            const phone = formatPhoneDisplay(rawPhone);
             const checked = state.selectedSims.has(id) ? 'checked' : '';
             const selectedClass = state.selectedSims.has(id) ? 'selected' : '';
             const statusBadge = getStatusBadgeClass(sim.status);
+
+            const costText = (state.isAdmin && state.showCostPrice) ? formatPrice(sim.cost_price || 0) : '••••';
+            const costBox = state.isAdmin ? `<div><small style="color:#b78103;">Gốc:</small> <strong>${costText}</strong></div>` : '';
+
+            const cardActions = state.isAdmin ? `
+                <div class="sim-card-actions">
+                    <button type="button" class="btn btn-sm btn-outline btn-edit" data-id="${id}">
+                        <i class="fas fa-edit"></i>
+                    </button>
+                    <button type="button" class="btn btn-sm btn-outline text-danger btn-delete" data-id="${id}">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            ` : `
+                <div class="sim-card-actions">
+                    <button type="button" class="btn btn-sm btn-outline btn-copy-sim" data-phone="${rawPhone}" title="Sao chép số">
+                        <i class="fas fa-copy"></i> Copy
+                    </button>
+                </div>
+            `;
 
             return `
                 <div class="sim-card-item ${selectedClass}" data-id="${id}">
@@ -849,16 +1190,14 @@
                         <span class="badge badge-type">${getSimType(sim)}</span>
                         <span class="badge ${statusBadge}">${sim.status || ''}</span>
                     </div>
+                    <div style="display:flex;justify-content:space-between;font-size:12px;margin:8px 0;padding:6px 8px;background:#f8f9fa;border-radius:6px;">
+                        ${costBox}
+                        <div><small style="color:#1a73e8;">CTV:</small> <strong>${formatPrice(sim.ctv_price || 0)}</strong></div>
+                        <div><small style="color:#ea4335;">Lẻ:</small> <strong style="color:#ea4335;">${formatPrice(sim.price || 0)}</strong></div>
+                    </div>
                     <div class="sim-card-bottom">
-                        <span class="sim-card-price">${formatPrice(sim.price)}</span>
-                        <div class="sim-card-actions">
-                            <button type="button" class="btn btn-sm btn-outline btn-edit" data-id="${id}">
-                                <i class="fas fa-edit"></i>
-                            </button>
-                            <button type="button" class="btn btn-sm btn-outline text-danger btn-delete" data-id="${id}">
-                                <i class="fas fa-trash"></i>
-                            </button>
-                        </div>
+                        <span class="sim-card-price" style="font-size:14px;">Bán: ${formatPrice(sim.price)}</span>
+                        ${cardActions}
                     </div>
                 </div>
             `;
@@ -869,10 +1208,42 @@
                 const id = String(e.target.dataset.id);
                 if (e.target.checked) state.selectedSims.add(id);
                 else state.selectedSims.delete(id);
-                if ($('#btn-post-selected')) $('#btn-post-selected').style.display = state.selectedSims.size > 0 ? '' : 'none';
+                const hasSelection = state.selectedSims.size > 0;
+                if ($('#btn-post-selected')) $('#btn-post-selected').style.display = hasSelection ? '' : 'none';
+                if ($('#btn-delete-selected')) $('#btn-delete-selected').style.display = (state.isAdmin && hasSelection) ? '' : 'none';
                 if ($('#selected-count')) $('#selected-count').textContent = state.selectedSims.size;
+                if ($('#delete-selected-count')) $('#delete-selected-count').textContent = state.selectedSims.size;
             });
         });
+
+        // Edit/Delete for cards
+        grid.querySelectorAll('.btn-edit').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openEditModal(btn.dataset.id);
+            });
+        });
+        grid.querySelectorAll('.btn-delete').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openDeleteModal(btn.dataset.id);
+            });
+        });
+        grid.querySelectorAll('.btn-copy-sim').forEach(btn => {
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                const phone = btn.dataset.phone;
+                navigator.clipboard.writeText(phone.replace(/\D/g, '')).then(() => {
+                    showToast(`Đã sao chép: ${formatPhoneDisplay(phone)}`, 'success');
+                }).catch(() => {
+                    showToast(`Số: ${phone}`, 'info');
+                });
+            });
+        });
+    }
         grid.querySelectorAll('.btn-edit').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.preventDefault();
@@ -986,7 +1357,7 @@
                 pageItems.forEach(s => {
                     const id = getSimId(s);
                     if (e.target.checked) state.selectedSims.add(id);
-                    else state.delete(id);
+                    else state.selectedSims.delete(id);
                 });
                 renderSimList();
             });
@@ -1026,30 +1397,65 @@
             });
         }
 
-        // Lắng nghe gõ giá để tự động nhận diện & quy đổi tiền
+        // Lắng nghe Giá gốc
+        const costInput = $('#sim-cost-price');
+        if (costInput) {
+            costInput.addEventListener('input', () => {
+                const num = parsePriceInput(costInput.value);
+                const hint = $('#sim-cost-price-hint');
+                if (hint) hint.innerHTML = num > 0 ? `<i class="fas fa-lock"></i> Vốn: <strong>${formatPrice(num)}</strong>` : '';
+                updateProfitCalc();
+            });
+            costInput.addEventListener('blur', () => {
+                const num = parsePriceInput(costInput.value);
+                if (num > 0) costInput.value = formatPrice(num).replace('₫', '').trim();
+            });
+        }
+
+        // Lắng nghe Giá CTV
+        const ctvInput = $('#sim-ctv-price');
+        if (ctvInput) {
+            ctvInput.addEventListener('input', () => {
+                const num = parsePriceInput(ctvInput.value);
+                const hint = $('#sim-ctv-price-hint');
+                if (hint) hint.innerHTML = num > 0 ? `<i class="fas fa-users"></i> CTV: <strong>${formatPrice(num)}</strong>` : '';
+            });
+            ctvInput.addEventListener('blur', () => {
+                const num = parsePriceInput(ctvInput.value);
+                if (num > 0) ctvInput.value = formatPrice(num).replace('₫', '').trim();
+            });
+        }
+
+        // Lắng nghe Giá bán lẻ
         const priceInput = $('#sim-price');
         if (priceInput) {
-            priceInput.addEventListener('input', (e) => {
-                const val = e.target.value.trim();
-                const priceNum = parsePriceInput(val);
-                const hint = $('#sim-price-hint');
-                if (hint) {
-                    if (val && priceNum > 0) {
-                        hint.innerHTML = `<i class="fas fa-money-bill-wave"></i> = <strong>${formatPrice(priceNum)}</strong>`;
-                    } else if (val) {
-                        hint.textContent = 'VD: 15tr, 12tr5, 500k, 1500000...';
-                    } else {
-                        hint.textContent = '';
-                    }
-                }
+            priceInput.addEventListener('input', () => {
+                updateProfitCalc();
             });
+            priceInput.addEventListener('blur', () => {
+                const num = parsePriceInput(priceInput.value);
+                if (num > 0) priceInput.value = formatPrice(num).replace('₫', '').trim();
+            });
+        }
 
-            priceInput.addEventListener('blur', (e) => {
-                const priceNum = parsePriceInput(e.target.value);
-                if (priceNum > 0) {
-                    e.target.value = formatPrice(priceNum).replace('₫', '').trim();
+        function updateProfitCalc() {
+            const cost = parsePriceInput($('#sim-cost-price') ? $('#sim-cost-price').value : 0);
+            const price = parsePriceInput($('#sim-price') ? $('#sim-price').value : 0);
+            const hint = $('#sim-price-hint');
+            if (!hint) return;
+
+            if (price > 0) {
+                let msg = `<i class="fas fa-tag"></i> Bán: <strong>${formatPrice(price)}</strong>`;
+                if (cost > 0) {
+                    const diff = price - cost;
+                    const color = diff >= 0 ? '#2e7d32' : '#d93025';
+                    const sign = diff >= 0 ? '+' : '';
+                    msg += ` | <span style="color:${color};font-weight:700;">(Lãi: ${sign}${formatPrice(diff)})</span>`;
                 }
-            });
+                hint.innerHTML = msg;
+            } else {
+                hint.textContent = '';
+            }
         }
 
         const addBtn = $('#btn-add-sim');
@@ -1060,6 +1466,8 @@
                 if (form) form.reset();
                 $('#sim-status').value = 'Còn hàng';
                 if ($('#sim-auto-detect-hint')) $('#sim-auto-detect-hint').textContent = '';
+                if ($('#sim-cost-price-hint')) $('#sim-cost-price-hint').textContent = '';
+                if ($('#sim-ctv-price-hint')) $('#sim-ctv-price-hint').textContent = '';
                 if ($('#sim-price-hint')) $('#sim-price-hint').textContent = '';
                 modal.classList.remove('hidden');
                 if (numberInput) numberInput.focus();
@@ -1079,6 +1487,8 @@
                 const number = $('#sim-number').value.trim();
                 const network = $('#sim-network').value || detectCarrier(number) || 'Viettel';
                 const type = $('#sim-type').value || detectSimType(number) || 'Số đẹp';
+                const cost_price = parsePriceInput($('#sim-cost-price').value);
+                const ctv_price = parsePriceInput($('#sim-ctv-price').value);
                 const price = parsePriceInput($('#sim-price').value);
                 const status = $('#sim-status').value;
                 const notes = $('#sim-notes').value.trim();
@@ -1088,7 +1498,7 @@
                     return;
                 }
 
-                const simData = { number, phone_number: number, network, type, sim_type: type, price, status, notes };
+                const simData = { number, phone_number: number, network, type, sim_type: type, cost_price, ctv_price, price, status, notes };
 
                 try {
                     showLoading();
@@ -1122,9 +1532,32 @@
         $('#sim-number').value = getSimPhone(sim);
         $('#sim-network').value = sim.network || '';
         $('#sim-type').value = getSimType(sim);
-        const pr = sim.price || 0;
-        $('#sim-price').value = formatPrice(pr).replace('₫', '').trim();
-        if ($('#sim-price-hint')) $('#sim-price-hint').innerHTML = `<i class="fas fa-money-bill-wave"></i> = <strong>${formatPrice(pr)}</strong>`;
+
+        const cost = sim.cost_price || 0;
+        const ctv = sim.ctv_price || 0;
+        const retail = sim.price || 0;
+
+        $('#sim-cost-price').value = cost > 0 ? formatPrice(cost).replace('₫', '').trim() : '';
+        if ($('#sim-cost-price-hint')) $('#sim-cost-price-hint').innerHTML = cost > 0 ? `<i class="fas fa-lock"></i> Vốn: <strong>${formatPrice(cost)}</strong>` : '';
+
+        $('#sim-ctv-price').value = ctv > 0 ? formatPrice(ctv).replace('₫', '').trim() : '';
+        if ($('#sim-ctv-price-hint')) $('#sim-ctv-price-hint').innerHTML = ctv > 0 ? `<i class="fas fa-users"></i> CTV: <strong>${formatPrice(ctv)}</strong>` : '';
+
+        $('#sim-price').value = retail > 0 ? formatPrice(retail).replace('₫', '').trim() : '';
+        
+        // Cập nhật tính lãi
+        const hint = $('#sim-price-hint');
+        if (hint && retail > 0) {
+            let msg = `<i class="fas fa-tag"></i> Bán: <strong>${formatPrice(retail)}</strong>`;
+            if (cost > 0) {
+                const diff = retail - cost;
+                const color = diff >= 0 ? '#2e7d32' : '#d93025';
+                const sign = diff >= 0 ? '+' : '';
+                msg += ` | <span style="color:${color};font-weight:700;">(Lãi: ${sign}${formatPrice(diff)})</span>`;
+            }
+            hint.innerHTML = msg;
+        }
+
         $('#sim-status').value = sim.status || 'Còn hàng';
         $('#sim-notes').value = sim.notes || '';
         if ($('#sim-auto-detect-hint')) $('#sim-auto-detect-hint').textContent = '';
@@ -1336,6 +1769,8 @@
                         network: net,
                         type: simType,
                         sim_type: simType,
+                        cost_price: 0,
+                        ctv_price: 0,
                         price: pr,
                         status: parts[4] || 'Còn hàng',
                         notes: parts[5] || ''
@@ -1394,6 +1829,14 @@
                     if ($('#sale-options-card')) $('#sale-options-card').classList.add('hidden');
                 }
 
+                generateZaloPreview();
+            });
+        });
+
+        // Chọn loại giá hiển thị trong bài Zalo (Giá lẻ hoặc Giá CTV)
+        $$('input[name="zalo-price-mode"]').forEach(radio => {
+            radio.addEventListener('change', (e) => {
+                state.zaloPriceType = e.target.value;
                 generateZaloPreview();
             });
         });
@@ -1556,19 +1999,29 @@
         if (copyBtn) copyBtn.disabled = false;
     }
 
+    function getPostPrice(sim) {
+        if (!sim) return 0;
+        if (state.zaloPriceType === 'ctv' && (sim.ctv_price || sim.gia_ctv)) {
+            return Number(sim.ctv_price || sim.gia_ctv);
+        }
+        return Number(sim.price || sim.gia_ban || 0);
+    }
+
     function generateSinglePost(sim) {
         if (!sim) return '';
         const phone = formatPhoneDisplay(getSimPhone(sim));
         const network = sim.network || '';
         const type = getSimType(sim) || 'Số đẹp';
-        const price = formatPrice(sim.price);
+        const chosenPrice = getPostPrice(sim);
+        const price = formatPrice(chosenPrice);
+        const priceLabel = (state.zaloPriceType === 'ctv' && (sim.ctv_price || sim.gia_ctv)) ? 'Giá CTV' : 'Giá';
 
         return `🔥🔥🔥 SIM SỐ ĐẸP 🔥🔥🔥
 ━━━━━━━━━━━━━━━
 📱 Số: ${phone}
 🏷️ Nhà mạng: ${network}
 ✨ Loại: ${type}
-💰 Giá: ${price}
+💰 ${priceLabel}: ${price}
 ━━━━━━━━━━━━━━━
 📞 Liên hệ ngay để sở hữu!
 👉 Inbox để biết thêm chi tiết
@@ -1578,16 +2031,19 @@
     function generateListPost(sims) {
         if (!sims.length) return '';
         const numEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
+        const isCtvPrice = state.zaloPriceType === 'ctv';
 
         let lines = sims.map((sim, idx) => {
             const phone = formatPhoneDisplay(getSimPhone(sim));
             const network = sim.network || '';
-            const price = formatPrice(sim.price);
+            const price = formatPrice(getPostPrice(sim));
             const emoji = numEmojis[idx] || `${idx + 1}.`;
             return `${emoji} ${phone} - ${network} - ${price}`;
         });
 
-        return `📋 DANH SÁCH SIM SỐ ĐẸP 📋
+        const headerTitle = isCtvPrice ? '📋 DANH SÁCH SIM GIÁ CTV 📋' : '📋 DANH SÁCH SIM SỐ ĐẸP 📋';
+
+        return `${headerTitle}
 ━━━━━━━━━━━━━━━━━━
 ${lines.join('\n')}
 ━━━━━━━━━━━━━━━━━━
@@ -1601,10 +2057,10 @@ ${lines.join('\n')}
 
         let simLines = sims.map(sim => {
             const phone = formatPhoneDisplay(getSimPhone(sim));
-            const originalPrice = sim.price || 0;
+            const originalPrice = getPostPrice(sim);
             const salePrice = Math.round(originalPrice * (1 - discount / 100));
             return `📱 ${phone}
-💰 Giá gốc: ${formatPrice(originalPrice)}
+💰 Giá niêm yết: ${formatPrice(originalPrice)}
 🏷️ Giá KM: ${formatPrice(salePrice)}`;
         });
 
@@ -1636,7 +2092,7 @@ ${simLines.join('\n\n')}
         let simLines = sims.map(sim => {
             const phone = formatPhoneDisplay(getSimPhone(sim));
             const network = sim.network || '';
-            const price = formatPrice(sim.price);
+            const price = formatPrice(getPostPrice(sim));
             return `📱 ${phone} - ${network} - ${price}`;
         });
 
@@ -1652,8 +2108,11 @@ ${simLines.join('\n')}
     // =============================================
     // Initialization
     // =============================================
-    function init() {
+    async function init() {
         initNavigation();
+        initAuthModal();
+        await checkInitialAuth();
+        initCostToggle();
         initFilters();
         initViewToggle();
         initSimModal();
