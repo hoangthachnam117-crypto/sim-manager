@@ -28,8 +28,22 @@ app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
 // =============================================
-// Hàm tiện ích
+// Hàm tiện ích & Chuẩn hóa dữ liệu
 // =============================================
+
+function normalizeSim(sim) {
+  if (!sim) return sim;
+  const phone = sim.phone_number || sim.number || sim.phone || '';
+  const type = sim.sim_type || sim.type || '';
+  return {
+    ...sim,
+    phone_number: phone,
+    number: phone,
+    phone: phone,
+    sim_type: type,
+    type: type
+  };
+}
 
 /**
  * Định dạng giá tiền VND
@@ -155,10 +169,12 @@ const VALID_STATUSES = ['Còn hàng', 'Đã bán', 'Đã giữ'];
  */
 function validateSimInput(data, isUpdate = false) {
   const errors = [];
+  const phone = data.phone_number || data.number || data.phone;
+  const simType = data.sim_type || data.type;
 
-  if (!isUpdate || data.phone_number !== undefined) {
-    if (!data.phone_number || typeof data.phone_number !== 'string' || data.phone_number.trim() === '') {
-      errors.push('Số điện thoại (phone_number) là bắt buộc');
+  if (!isUpdate || phone !== undefined) {
+    if (!phone || typeof phone !== 'string' || phone.trim() === '') {
+      errors.push('Số điện thoại là bắt buộc');
     }
   }
 
@@ -168,8 +184,8 @@ function validateSimInput(data, isUpdate = false) {
     }
   }
 
-  if (!isUpdate || data.sim_type !== undefined) {
-    if (!data.sim_type || !VALID_SIM_TYPES.includes(data.sim_type)) {
+  if (!isUpdate || simType !== undefined) {
+    if (!simType || !VALID_SIM_TYPES.includes(simType)) {
       errors.push(`Loại SIM (sim_type) không hợp lệ. Giá trị cho phép: ${VALID_SIM_TYPES.join(', ')}`);
     }
   }
@@ -197,17 +213,15 @@ function validateSimInput(data, isUpdate = false) {
 /**
  * GET /api/sims
  * Lấy danh sách SIM với bộ lọc, phân trang và sắp xếp
- *
- * Query params:
- *   network, sim_type, status, min_price, max_price,
- *   search, page, limit, sort_by, sort_order
  */
 app.get('/api/sims', (req, res) => {
   try {
     const result = database.getSims(req.query);
+    const normalizedData = (result.data || []).map(normalizeSim);
     res.json({
       success: true,
-      ...result
+      ...result,
+      data: normalizedData
     });
   } catch (err) {
     console.error('❌ Lỗi lấy danh sách SIM:', err.message);
@@ -222,6 +236,9 @@ app.get('/api/sims', (req, res) => {
 app.get('/api/sims/stats', (req, res) => {
   try {
     const stats = database.getStats();
+    if (stats && stats.recent_sims) {
+      stats.recent_sims = stats.recent_sims.map(normalizeSim);
+    }
     res.json({
       success: true,
       data: stats
@@ -242,7 +259,7 @@ app.get('/api/sims/:id', (req, res) => {
     if (!sim) {
       return res.status(404).json({ success: false, error: 'Không tìm thấy SIM' });
     }
-    res.json({ success: true, data: sim });
+    res.json({ success: true, data: normalizeSim(sim) });
   } catch (err) {
     console.error('❌ Lỗi lấy thông tin SIM:', err.message);
     res.status(500).json({ success: false, error: 'Lỗi server' });
@@ -255,24 +272,30 @@ app.get('/api/sims/:id', (req, res) => {
  */
 app.post('/api/sims', (req, res) => {
   try {
-    // Kiểm tra dữ liệu đầu vào
     const errors = validateSimInput(req.body);
     if (errors.length > 0) {
       return res.status(400).json({ success: false, errors });
     }
 
-    const sim = database.createSim(req.body);
+    const payload = {
+      phone_number: req.body.phone_number || req.body.number || req.body.phone,
+      network: req.body.network,
+      sim_type: req.body.sim_type || req.body.type,
+      price: req.body.price,
+      status: req.body.status,
+      notes: req.body.notes
+    };
+
+    const sim = database.createSim(payload);
     res.status(201).json({
       success: true,
       message: 'Tạo SIM thành công',
-      data: sim
+      data: normalizeSim(sim)
     });
   } catch (err) {
-    // Xử lý lỗi trùng số điện thoại
     if (err.message.includes('UNIQUE constraint failed')) {
       return res.status(409).json({ success: false, error: 'Số điện thoại đã tồn tại trong hệ thống' });
     }
-    // Xử lý lỗi vi phạm CHECK constraint
     if (err.message.includes('CHECK constraint failed')) {
       return res.status(400).json({ success: false, error: 'Dữ liệu không hợp lệ, vui lòng kiểm tra lại các giá trị' });
     }
@@ -289,13 +312,21 @@ app.put('/api/sims/:id', (req, res) => {
   try {
     const id = parseInt(req.params.id);
 
-    // Kiểm tra dữ liệu đầu vào (chế độ update)
     const errors = validateSimInput(req.body, true);
     if (errors.length > 0) {
       return res.status(400).json({ success: false, errors });
     }
 
-    const sim = database.updateSim(id, req.body);
+    const payload = {
+      phone_number: req.body.phone_number || req.body.number || req.body.phone,
+      network: req.body.network,
+      sim_type: req.body.sim_type || req.body.type,
+      price: req.body.price,
+      status: req.body.status,
+      notes: req.body.notes
+    };
+
+    const sim = database.updateSim(id, payload);
     if (!sim) {
       return res.status(404).json({ success: false, error: 'Không tìm thấy SIM để cập nhật' });
     }
@@ -303,7 +334,7 @@ app.put('/api/sims/:id', (req, res) => {
     res.json({
       success: true,
       message: 'Cập nhật SIM thành công',
-      data: sim
+      data: normalizeSim(sim)
     });
   } catch (err) {
     if (err.message.includes('UNIQUE constraint failed')) {

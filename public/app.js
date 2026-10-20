@@ -58,6 +58,21 @@
     const $ = (sel, ctx = document) => ctx.querySelector(sel);
     const $$ = (sel, ctx = document) => ctx.querySelectorAll(sel);
 
+    function getSimPhone(sim) {
+        if (!sim) return '';
+        return sim.phone_number || sim.number || sim.phone || '';
+    }
+
+    function getSimType(sim) {
+        if (!sim) return '';
+        return sim.sim_type || sim.type || '';
+    }
+
+    function getSimId(sim) {
+        if (!sim) return '';
+        return String(sim.id !== undefined ? sim.id : (sim._id !== undefined ? sim._id : ''));
+    }
+
     function formatPrice(value) {
         if (!value && value !== 0) return '0₫';
         return new Intl.NumberFormat('vi-VN').format(value) + '₫';
@@ -65,7 +80,7 @@
 
     function formatPhoneDisplay(phone) {
         if (!phone) return '';
-        const digits = phone.replace(/\D/g, '');
+        const digits = String(phone).replace(/\D/g, '');
         if (digits.length === 10) {
             return digits.slice(0, 4) + '.' + digits.slice(4, 7) + '.' + digits.slice(7);
         }
@@ -88,6 +103,7 @@
     // =============================================
     function showToast(message, type = 'info') {
         const container = $('#toast-container');
+        if (!container) return;
         const icons = {
             success: 'fa-check-circle',
             error: 'fa-exclamation-circle',
@@ -98,7 +114,7 @@
         const toast = document.createElement('div');
         toast.className = `toast toast-${type}`;
         toast.innerHTML = `
-            <i class="fas ${icons[type]} toast-icon"></i>
+            <i class="fas ${icons[type] || 'fa-info-circle'} toast-icon"></i>
             <span class="toast-message">${message}</span>
             <button class="toast-close"><i class="fas fa-times"></i></button>
         `;
@@ -106,7 +122,7 @@
         container.appendChild(toast);
 
         const closeBtn = toast.querySelector('.toast-close');
-        closeBtn.addEventListener('click', () => removeToast(toast));
+        if (closeBtn) closeBtn.addEventListener('click', () => removeToast(toast));
 
         setTimeout(() => removeToast(toast), 3500);
     }
@@ -123,11 +139,13 @@
     // Loading
     // =============================================
     function showLoading() {
-        $('#loading-overlay').classList.remove('hidden');
+        const overlay = $('#loading-overlay');
+        if (overlay) overlay.classList.remove('hidden');
     }
 
     function hideLoading() {
-        $('#loading-overlay').classList.add('hidden');
+        const overlay = $('#loading-overlay');
+        if (overlay) overlay.classList.add('hidden');
     }
 
     // =============================================
@@ -143,7 +161,7 @@
             const response = await fetch(url, config);
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
-                throw new Error(errorData.message || `Lỗi ${response.status}`);
+                throw new Error(errorData.error || errorData.message || `Lỗi ${response.status}`);
             }
             const text = await response.text();
             return text ? JSON.parse(text) : {};
@@ -159,7 +177,16 @@
         try {
             showLoading();
             const data = await apiRequest(API_BASE);
-            state.sims = Array.isArray(data) ? data : (data.sims || data.data || []);
+            const rawSims = Array.isArray(data) ? data : (data.data || data.sims || []);
+            // Chuẩn hóa dữ liệu ngay khi tải về
+            state.sims = rawSims.map(s => ({
+                ...s,
+                id: getSimId(s),
+                number: getSimPhone(s),
+                phone_number: getSimPhone(s),
+                type: getSimType(s),
+                sim_type: getSimType(s)
+            }));
             applyFiltersAndSort();
             renderDashboard();
         } catch (err) {
@@ -176,9 +203,19 @@
     async function createSim(simData) {
         try {
             showLoading();
+            const payload = {
+                phone_number: simData.number || simData.phone_number,
+                number: simData.number || simData.phone_number,
+                network: simData.network,
+                sim_type: simData.type || simData.sim_type,
+                type: simData.type || simData.sim_type,
+                price: simData.price,
+                status: simData.status,
+                notes: simData.notes
+            };
             const result = await apiRequest(API_BASE, {
                 method: 'POST',
-                body: JSON.stringify(simData)
+                body: JSON.stringify(payload)
             });
             showToast('Thêm SIM thành công!', 'success');
             await fetchSims();
@@ -194,9 +231,19 @@
     async function updateSim(id, simData) {
         try {
             showLoading();
+            const payload = {
+                phone_number: simData.number || simData.phone_number,
+                number: simData.number || simData.phone_number,
+                network: simData.network,
+                sim_type: simData.type || simData.sim_type,
+                type: simData.type || simData.sim_type,
+                price: simData.price,
+                status: simData.status,
+                notes: simData.notes
+            };
             const result = await apiRequest(`${API_BASE}/${id}`, {
                 method: 'PUT',
-                body: JSON.stringify(simData)
+                body: JSON.stringify(payload)
             });
             showToast('Cập nhật SIM thành công!', 'success');
             await fetchSims();
@@ -226,11 +273,12 @@
     async function bulkImportSims(simsArray) {
         try {
             showLoading();
+            const csvLines = simsArray.map(s => `${getSimPhone(s)},${s.network},${getSimType(s)},${s.price},${s.status},${s.notes || ''}`).join('\n');
             const result = await apiRequest(`${API_BASE}/bulk`, {
                 method: 'POST',
-                body: JSON.stringify({ sims: simsArray })
+                body: JSON.stringify({ csv: csvLines })
             });
-            showToast(`Đã nhập ${simsArray.length} SIM thành công!`, 'success');
+            showToast(`Đã nhập thành công!`, 'success');
             await fetchSims();
             return result;
         } catch (err) {
@@ -262,21 +310,18 @@
     }
 
     function switchPage(page, titleHtml) {
-        // Update nav items
         $$('[data-page]').forEach(el => el.classList.remove('active'));
         $$(`[data-page="${page}"]`).forEach(el => el.classList.add('active'));
 
-        // Update pages
         $$('.page').forEach(p => p.classList.remove('active'));
         const pageEl = $(`#page-${page}`);
         if (pageEl) pageEl.classList.add('active');
 
-        // Update top bar
         if (titleHtml) {
-            $('#page-title').innerHTML = titleHtml;
+            const titleEl = $('#page-title');
+            if (titleEl) titleEl.innerHTML = titleHtml;
         }
 
-        // Refresh data on page switch
         if (page === 'dashboard') {
             renderDashboard();
         } else if (page === 'manage') {
@@ -293,31 +338,26 @@
     function applyFiltersAndSort() {
         let list = [...state.sims];
 
-        // Search
         if (state.filters.search) {
             const q = state.filters.search.toLowerCase().replace(/\D/g, '');
             list = list.filter(s => {
-                const num = (s.number || s.phone || '').replace(/\D/g, '');
+                const num = getSimPhone(s).replace(/\D/g, '');
                 return num.includes(q);
             });
         }
 
-        // Network
         if (state.filters.network) {
             list = list.filter(s => s.network === state.filters.network);
         }
 
-        // Type
         if (state.filters.type) {
-            list = list.filter(s => s.type === state.filters.type);
+            list = list.filter(s => getSimType(s) === state.filters.type);
         }
 
-        // Status
         if (state.filters.status) {
             list = list.filter(s => s.status === state.filters.status);
         }
 
-        // Price range
         if (state.filters.priceMin !== null) {
             list = list.filter(s => (s.price || 0) >= state.filters.priceMin);
         }
@@ -325,15 +365,14 @@
             list = list.filter(s => (s.price || 0) <= state.filters.priceMax);
         }
 
-        // Sort
         list.sort((a, b) => {
             switch (state.currentSort) {
-                case 'date-desc': return new Date(b.createdAt || 0) - new Date(a.createdAt || 0);
-                case 'date-asc': return new Date(a.createdAt || 0) - new Date(b.createdAt || 0);
+                case 'date-desc': return new Date(b.created_at || b.createdAt || 0) - new Date(a.created_at || a.createdAt || 0);
+                case 'date-asc': return new Date(a.created_at || a.createdAt || 0) - new Date(b.created_at || b.createdAt || 0);
                 case 'price-asc': return (a.price || 0) - (b.price || 0);
                 case 'price-desc': return (b.price || 0) - (a.price || 0);
-                case 'number-asc': return (a.number || a.phone || '').localeCompare(b.number || b.phone || '');
-                case 'number-desc': return (b.number || b.phone || '').localeCompare(a.number || a.phone || '');
+                case 'number-asc': return getSimPhone(a).localeCompare(getSimPhone(b));
+                case 'number-desc': return getSimPhone(b).localeCompare(getSimPhone(a));
                 default: return 0;
             }
         });
@@ -344,50 +383,59 @@
     }
 
     function initFilters() {
-        // Toggle filter panel
-        $('#btn-filter-toggle').addEventListener('click', () => {
-            $('#filters-panel').classList.toggle('hidden');
-        });
+        const toggleBtn = $('#btn-filter-toggle');
+        if (toggleBtn) {
+            toggleBtn.addEventListener('click', () => {
+                const panel = $('#filters-panel');
+                if (panel) panel.classList.toggle('hidden');
+            });
+        }
 
-        // Apply filters
-        $('#btn-apply-filters').addEventListener('click', () => {
-            state.filters.network = $('#filter-network').value;
-            state.filters.type = $('#filter-type').value;
-            state.filters.status = $('#filter-status').value;
-            state.filters.priceMin = $('#filter-price-min').value ? Number($('#filter-price-min').value) : null;
-            state.filters.priceMax = $('#filter-price-max').value ? Number($('#filter-price-max').value) : null;
-            applyFiltersAndSort();
-        });
+        const applyBtn = $('#btn-apply-filters');
+        if (applyBtn) {
+            applyBtn.addEventListener('click', () => {
+                state.filters.network = $('#filter-network').value;
+                state.filters.type = $('#filter-type').value;
+                state.filters.status = $('#filter-status').value;
+                state.filters.priceMin = $('#filter-price-min').value ? Number($('#filter-price-min').value) : null;
+                state.filters.priceMax = $('#filter-price-max').value ? Number($('#filter-price-max').value) : null;
+                applyFiltersAndSort();
+            });
+        }
 
-        // Clear filters
-        $('#btn-clear-filters').addEventListener('click', () => {
-            $('#filter-network').value = '';
-            $('#filter-type').value = '';
-            $('#filter-status').value = '';
-            $('#filter-price-min').value = '';
-            $('#filter-price-max').value = '';
-            state.filters = { search: '', network: '', type: '', status: '', priceMin: null, priceMax: null };
-            applyFiltersAndSort();
-        });
+        const clearBtn = $('#btn-clear-filters');
+        if (clearBtn) {
+            clearBtn.addEventListener('click', () => {
+                $('#filter-network').value = '';
+                $('#filter-type').value = '';
+                $('#filter-status').value = '';
+                $('#filter-price-min').value = '';
+                $('#filter-price-max').value = '';
+                state.filters = { search: '', network: '', type: '', status: '', priceMin: null, priceMax: null };
+                applyFiltersAndSort();
+            });
+        }
 
-        // Search
-        $('#search-input').addEventListener('input', debounce((e) => {
-            state.filters.search = e.target.value;
-            applyFiltersAndSort();
-        }, 300));
+        const searchInput = $('#search-input');
+        if (searchInput) {
+            searchInput.addEventListener('input', debounce((e) => {
+                state.filters.search = e.target.value;
+                applyFiltersAndSort();
+            }, 300));
+        }
 
-        // Sort
-        $('#sort-select').addEventListener('change', (e) => {
-            state.currentSort = e.target.value;
-            applyFiltersAndSort();
-        });
+        const sortSelect = $('#sort-select');
+        if (sortSelect) {
+            sortSelect.addEventListener('change', (e) => {
+                state.currentSort = e.target.value;
+                applyFiltersAndSort();
+            });
+        }
     }
 
-    // =============================================
-    // View Toggle
-    // =============================================
     function initViewToggle() {
         const btn = $('#btn-toggle-view');
+        if (!btn) return;
         btn.addEventListener('click', () => {
             if (state.viewMode === 'table') {
                 state.viewMode = 'cards';
@@ -410,10 +458,10 @@
         const sold = sims.filter(s => s.status === 'Đã bán').length;
         const totalValue = sims.reduce((sum, s) => sum + (s.price || 0), 0);
 
-        $('#stat-total').textContent = total;
-        $('#stat-available').textContent = available;
-        $('#stat-sold').textContent = sold;
-        $('#stat-value').textContent = formatPrice(totalValue);
+        if ($('#stat-total')) $('#stat-total').textContent = total;
+        if ($('#stat-available')) $('#stat-available').textContent = available;
+        if ($('#stat-sold')) $('#stat-sold').textContent = sold;
+        if ($('#stat-value')) $('#stat-value').textContent = formatPrice(totalValue);
 
         renderNetworkChart();
         renderRecentSims();
@@ -430,7 +478,6 @@
         const total = sims.length || 1;
         const entries = Object.entries(networkCounts).sort((a, b) => b[1] - a[1]);
 
-        // Build conic gradient
         let gradientParts = [];
         let cumPercent = 0;
 
@@ -442,32 +489,19 @@
         });
 
         const chart = $('#network-chart');
-        if (entries.length > 0) {
-            chart.style.background = `conic-gradient(${gradientParts.join(', ')})`;
-        } else {
-            chart.style.background = 'var(--border-light)';
+        if (chart) {
+            if (entries.length > 0) {
+                chart.style.background = `conic-gradient(${gradientParts.join(', ')})`;
+            } else {
+                chart.style.background = 'var(--border-light)';
+            }
         }
-
-        // Legend
-        const legend = $('#network-legend');
-        legend.innerHTML = entries.map(([network, count]) => {
-            const color = NETWORK_COLORS[network] || '#9e9e9e';
-            const pct = ((count / total) * 100).toFixed(1);
-            return `
-                <div class="legend-item">
-                    <span class="legend-dot" style="background:${color}"></span>
-                    <span>${network} (${count} - ${pct}%)</span>
-                </div>
-            `;
-        }).join('');
     }
 
     function renderRecentSims() {
-        const recent = [...state.sims]
-            .sort((a, b) => new Date(b.createdAt || 0) - new Date(a.createdAt || 0))
-            .slice(0, 5);
-
+        const recent = [...state.sims].slice(0, 5);
         const container = $('#recent-sims-list');
+        if (!container) return;
 
         if (recent.length === 0) {
             container.innerHTML = `
@@ -481,7 +515,7 @@
         }
 
         container.innerHTML = recent.map(sim => {
-            const phone = formatPhoneDisplay(sim.number || sim.phone || '');
+            const phone = formatPhoneDisplay(getSimPhone(sim));
             const statusBadge = getStatusBadgeClass(sim.status);
             return `
                 <div class="recent-sim-item">
@@ -489,7 +523,7 @@
                         <div class="recent-sim-number">${phone}</div>
                         <div class="recent-sim-details">
                             <span class="badge badge-network">${sim.network || ''}</span>
-                            <span class="badge badge-type">${sim.type || ''}</span>
+                            <span class="badge badge-type">${getSimType(sim)}</span>
                             <span class="badge ${statusBadge}">${sim.status || ''}</span>
                         </div>
                     </div>
@@ -519,33 +553,30 @@
         const start = (state.currentPage - 1) * ITEMS_PER_PAGE;
         const pageItems = state.filteredSims.slice(start, start + ITEMS_PER_PAGE);
 
-        $('#result-count').textContent = `${total} SIM`;
+        if ($('#result-count')) $('#result-count').textContent = `${total} SIM`;
 
-        // Update selection buttons visibility
         const hasSelection = state.selectedSims.size > 0;
-        $('#btn-select-all').style.display = total > 0 ? '' : 'none';
-        $('#btn-post-selected').style.display = hasSelection ? '' : 'none';
-        $('#selected-count').textContent = state.selectedSims.size;
+        if ($('#btn-select-all')) $('#btn-select-all').style.display = total > 0 ? '' : 'none';
+        if ($('#btn-post-selected')) $('#btn-post-selected').style.display = hasSelection ? '' : 'none';
+        if ($('#selected-count')) $('#selected-count').textContent = state.selectedSims.size;
 
-        // Empty state
         const emptyEl = $('#manage-empty');
         if (total === 0) {
-            emptyEl.classList.remove('hidden');
-            $('#sim-table-wrapper').classList.add('hidden');
-            $('#sim-cards-grid').classList.add('hidden');
+            if (emptyEl) emptyEl.classList.remove('hidden');
+            if ($('#sim-table-wrapper')) $('#sim-table-wrapper').classList.add('hidden');
+            if ($('#sim-cards-grid')) $('#sim-cards-grid').classList.add('hidden');
         } else {
-            emptyEl.classList.add('hidden');
+            if (emptyEl) emptyEl.classList.add('hidden');
             renderTable(pageItems);
             renderCards(pageItems);
 
-            // Show correct view (desktop decision)
             if (window.innerWidth >= 768) {
                 if (state.viewMode === 'table') {
-                    $('#sim-table-wrapper').classList.remove('hidden');
-                    $('#sim-cards-grid').classList.add('hidden');
+                    if ($('#sim-table-wrapper')) $('#sim-table-wrapper').classList.remove('hidden');
+                    if ($('#sim-cards-grid')) $('#sim-cards-grid').classList.add('hidden');
                 } else {
-                    $('#sim-table-wrapper').classList.add('hidden');
-                    $('#sim-cards-grid').classList.remove('hidden');
+                    if ($('#sim-table-wrapper')) $('#sim-table-wrapper').classList.add('hidden');
+                    if ($('#sim-cards-grid')) $('#sim-cards-grid').classList.remove('hidden');
                 }
             }
         }
@@ -555,9 +586,11 @@
 
     function renderTable(items) {
         const tbody = $('#sim-table-body');
+        if (!tbody) return;
+
         tbody.innerHTML = items.map(sim => {
-            const id = sim._id || sim.id;
-            const phone = formatPhoneDisplay(sim.number || sim.phone || '');
+            const id = getSimId(sim);
+            const phone = formatPhoneDisplay(getSimPhone(sim));
             const checked = state.selectedSims.has(id) ? 'checked' : '';
             const selectedClass = state.selectedSims.has(id) ? 'selected' : '';
             const statusBadge = getStatusBadgeClass(sim.status);
@@ -567,17 +600,17 @@
                     <td class="col-check">
                         <input type="checkbox" class="sim-checkbox" data-id="${id}" ${checked}>
                     </td>
-                    <td class="sim-number-cell">${phone}</td>
+                    <td class="sim-number-cell"><strong>${phone}</strong></td>
                     <td><span class="badge badge-network">${sim.network || ''}</span></td>
-                    <td><span class="badge badge-type">${sim.type || ''}</span></td>
+                    <td><span class="badge badge-type">${getSimType(sim)}</span></td>
                     <td class="sim-price-cell">${formatPrice(sim.price)}</td>
                     <td><span class="badge ${statusBadge}">${sim.status || ''}</span></td>
                     <td>
                         <div class="action-btns">
-                            <button class="btn btn-sm btn-outline btn-edit" data-id="${id}" title="Sửa">
-                                <i class="fas fa-edit"></i>
+                            <button type="button" class="btn btn-sm btn-outline btn-edit" data-id="${id}" title="Sửa">
+                                <i class="fas fa-edit"></i> Sửa
                             </button>
-                            <button class="btn btn-sm btn-outline text-danger btn-delete" data-id="${id}" title="Xóa">
+                            <button type="button" class="btn btn-sm btn-outline text-danger btn-delete" data-id="${id}" title="Xóa">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -589,30 +622,46 @@
         // Checkbox events
         tbody.querySelectorAll('.sim-checkbox').forEach(cb => {
             cb.addEventListener('change', (e) => {
-                const id = e.target.dataset.id;
+                const id = String(e.target.dataset.id);
                 if (e.target.checked) {
                     state.selectedSims.add(id);
                 } else {
                     state.selectedSims.delete(id);
                 }
-                renderSimList();
+                const row = tbody.querySelector(`tr[data-id="${id}"]`);
+                if (row) {
+                    if (e.target.checked) row.classList.add('selected');
+                    else row.classList.remove('selected');
+                }
+                if ($('#btn-post-selected')) $('#btn-post-selected').style.display = state.selectedSims.size > 0 ? '' : 'none';
+                if ($('#selected-count')) $('#selected-count').textContent = state.selectedSims.size;
             });
         });
 
         // Edit/Delete events
         tbody.querySelectorAll('.btn-edit').forEach(btn => {
-            btn.addEventListener('click', () => openEditModal(btn.dataset.id));
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openEditModal(btn.dataset.id);
+            });
         });
         tbody.querySelectorAll('.btn-delete').forEach(btn => {
-            btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openDeleteModal(btn.dataset.id);
+            });
         });
     }
 
     function renderCards(items) {
         const grid = $('#sim-cards-grid');
+        if (!grid) return;
+
         grid.innerHTML = items.map(sim => {
-            const id = sim._id || sim.id;
-            const phone = formatPhoneDisplay(sim.number || sim.phone || '');
+            const id = getSimId(sim);
+            const phone = formatPhoneDisplay(getSimPhone(sim));
             const checked = state.selectedSims.has(id) ? 'checked' : '';
             const selectedClass = state.selectedSims.has(id) ? 'selected' : '';
             const statusBadge = getStatusBadgeClass(sim.status);
@@ -625,16 +674,16 @@
                     </div>
                     <div class="sim-card-meta">
                         <span class="badge badge-network">${sim.network || ''}</span>
-                        <span class="badge badge-type">${sim.type || ''}</span>
+                        <span class="badge badge-type">${getSimType(sim)}</span>
                         <span class="badge ${statusBadge}">${sim.status || ''}</span>
                     </div>
                     <div class="sim-card-bottom">
                         <span class="sim-card-price">${formatPrice(sim.price)}</span>
                         <div class="sim-card-actions">
-                            <button class="btn btn-sm btn-outline btn-edit" data-id="${id}">
+                            <button type="button" class="btn btn-sm btn-outline btn-edit" data-id="${id}">
                                 <i class="fas fa-edit"></i>
                             </button>
-                            <button class="btn btn-sm btn-outline text-danger btn-delete" data-id="${id}">
+                            <button type="button" class="btn btn-sm btn-outline text-danger btn-delete" data-id="${id}">
                                 <i class="fas fa-trash"></i>
                             </button>
                         </div>
@@ -643,36 +692,42 @@
             `;
         }).join('');
 
-        // Events
         grid.querySelectorAll('.sim-checkbox').forEach(cb => {
             cb.addEventListener('change', (e) => {
-                const id = e.target.dataset.id;
+                const id = String(e.target.dataset.id);
                 if (e.target.checked) state.selectedSims.add(id);
                 else state.selectedSims.delete(id);
-                renderSimList();
+                if ($('#btn-post-selected')) $('#btn-post-selected').style.display = state.selectedSims.size > 0 ? '' : 'none';
+                if ($('#selected-count')) $('#selected-count').textContent = state.selectedSims.size;
             });
         });
         grid.querySelectorAll('.btn-edit').forEach(btn => {
-            btn.addEventListener('click', () => openEditModal(btn.dataset.id));
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openEditModal(btn.dataset.id);
+            });
         });
         grid.querySelectorAll('.btn-delete').forEach(btn => {
-            btn.addEventListener('click', () => openDeleteModal(btn.dataset.id));
+            btn.addEventListener('click', (e) => {
+                e.preventDefault();
+                e.stopPropagation();
+                openDeleteModal(btn.dataset.id);
+            });
         });
     }
 
     function renderPagination(totalPages) {
         const container = $('#pagination');
+        if (!container) return;
         if (totalPages <= 1) {
             container.innerHTML = '';
             return;
         }
 
         let html = '';
-
-        // Previous
         html += `<button class="page-btn" data-page="${state.currentPage - 1}" ${state.currentPage <= 1 ? 'disabled' : ''}><i class="fas fa-chevron-left"></i></button>`;
 
-        // Page numbers
         const maxVisible = 5;
         let startPage = Math.max(1, state.currentPage - Math.floor(maxVisible / 2));
         let endPage = Math.min(totalPages, startPage + maxVisible - 1);
@@ -694,9 +749,7 @@
             html += `<button class="page-btn" data-page="${totalPages}">${totalPages}</button>`;
         }
 
-        // Next
         html += `<button class="page-btn" data-page="${state.currentPage + 1}" ${state.currentPage >= totalPages ? 'disabled' : ''}><i class="fas fa-chevron-right"></i></button>`;
-
         container.innerHTML = html;
 
         container.querySelectorAll('.page-btn').forEach(btn => {
@@ -705,7 +758,6 @@
                 if (p >= 1 && p <= totalPages) {
                     state.currentPage = p;
                     renderSimList();
-                    // Scroll to top of list
                     $('#page-manage').scrollIntoView({ behavior: 'smooth', block: 'start' });
                 }
             });
@@ -716,36 +768,43 @@
     // Select All / Post Selected
     // =============================================
     function initSelectionActions() {
-        $('#btn-select-all').addEventListener('click', () => {
-            const allSelected = state.filteredSims.every(s => state.selectedSims.has(s._id || s.id));
-            if (allSelected) {
-                state.filteredSims.forEach(s => state.selectedSims.delete(s._id || s.id));
-            } else {
-                state.filteredSims.forEach(s => state.selectedSims.add(s._id || s.id));
-            }
-            renderSimList();
-        });
-
-        $('#btn-post-selected').addEventListener('click', () => {
-            // Switch to Zalo page with selected SIMs
-            const selectedSimObjects = state.sims.filter(s => state.selectedSims.has(s._id || s.id));
-            state.zaloSelectedSims = selectedSimObjects;
-            switchPage('zalo', '<i class="fas fa-share-alt"></i> Đăng Zalo');
-            renderZaloSelectedChips();
-            generateZaloPreview();
-        });
-
-        // Check all checkbox in table header
-        $('#check-all').addEventListener('change', (e) => {
-            const start = (state.currentPage - 1) * ITEMS_PER_PAGE;
-            const pageItems = state.filteredSims.slice(start, start + ITEMS_PER_PAGE);
-            pageItems.forEach(s => {
-                const id = s._id || s.id;
-                if (e.target.checked) state.selectedSims.add(id);
-                else state.selectedSims.delete(id);
+        const selectAllBtn = $('#btn-select-all');
+        if (selectAllBtn) {
+            selectAllBtn.addEventListener('click', () => {
+                const allSelected = state.filteredSims.every(s => state.selectedSims.has(getSimId(s)));
+                if (allSelected) {
+                    state.filteredSims.forEach(s => state.selectedSims.delete(getSimId(s)));
+                } else {
+                    state.filteredSims.forEach(s => state.selectedSims.add(getSimId(s)));
+                }
+                renderSimList();
             });
-            renderSimList();
-        });
+        }
+
+        const postSelectedBtn = $('#btn-post-selected');
+        if (postSelectedBtn) {
+            postSelectedBtn.addEventListener('click', () => {
+                const selectedSimObjects = state.sims.filter(s => state.selectedSims.has(getSimId(s)));
+                state.zaloSelectedSims = selectedSimObjects;
+                switchPage('zalo', '<i class="fas fa-share-alt"></i> Đăng Zalo');
+                renderZaloSelectedChips();
+                generateZaloPreview();
+            });
+        }
+
+        const checkAll = $('#check-all');
+        if (checkAll) {
+            checkAll.addEventListener('change', (e) => {
+                const start = (state.currentPage - 1) * ITEMS_PER_PAGE;
+                const pageItems = state.filteredSims.slice(start, start + ITEMS_PER_PAGE);
+                pageItems.forEach(s => {
+                    const id = getSimId(s);
+                    if (e.target.checked) state.selectedSims.add(id);
+                    else state.selectedSims.delete(id);
+                });
+                renderSimList();
+            });
+        }
     }
 
     // =============================================
@@ -755,66 +814,76 @@
         const modal = $('#modal-sim');
         const form = $('#sim-form');
 
-        $('#btn-add-sim').addEventListener('click', () => {
-            state.editTargetId = null;
-            $('#modal-sim-title').innerHTML = '<i class="fas fa-plus-circle"></i> Thêm SIM mới';
-            form.reset();
-            $('#sim-status').value = 'Còn hàng';
-            modal.classList.remove('hidden');
-        });
+        const addBtn = $('#btn-add-sim');
+        if (addBtn) {
+            addBtn.addEventListener('click', () => {
+                state.editTargetId = null;
+                $('#modal-sim-title').innerHTML = '<i class="fas fa-plus-circle"></i> Thêm SIM mới';
+                if (form) form.reset();
+                $('#sim-status').value = 'Còn hàng';
+                modal.classList.remove('hidden');
+            });
+        }
 
-        $('#modal-sim-close').addEventListener('click', () => modal.classList.add('hidden'));
-        $('#modal-sim-cancel').addEventListener('click', () => modal.classList.add('hidden'));
+        if ($('#modal-sim-close')) $('#modal-sim-close').addEventListener('click', () => modal.classList.add('hidden'));
+        if ($('#modal-sim-cancel')) $('#modal-sim-cancel').addEventListener('click', () => modal.classList.add('hidden'));
 
         modal.addEventListener('click', (e) => {
             if (e.target === modal) modal.classList.add('hidden');
         });
 
-        $('#modal-sim-save').addEventListener('click', async () => {
-            const number = $('#sim-number').value.trim();
-            const network = $('#sim-network').value;
-            const type = $('#sim-type').value;
-            const price = parseInt($('#sim-price').value) || 0;
-            const status = $('#sim-status').value;
-            const notes = $('#sim-notes').value.trim();
+        const saveBtn = $('#modal-sim-save');
+        if (saveBtn) {
+            saveBtn.addEventListener('click', async () => {
+                const number = $('#sim-number').value.trim();
+                const network = $('#sim-network').value;
+                const type = $('#sim-type').value;
+                const price = parseInt($('#sim-price').value) || 0;
+                const status = $('#sim-status').value;
+                const notes = $('#sim-notes').value.trim();
 
-            if (!number) {
-                showToast('Vui lòng nhập số điện thoại', 'warning');
-                return;
-            }
-            if (!network) {
-                showToast('Vui lòng chọn nhà mạng', 'warning');
-                return;
-            }
-            if (!type) {
-                showToast('Vui lòng chọn loại SIM', 'warning');
-                return;
-            }
-
-            const simData = { number, network, type, price, status, notes };
-
-            try {
-                if (state.editTargetId) {
-                    await updateSim(state.editTargetId, simData);
-                } else {
-                    await createSim(simData);
+                if (!number) {
+                    showToast('Vui lòng nhập số điện thoại', 'warning');
+                    return;
                 }
-                modal.classList.add('hidden');
-            } catch (err) {
-                // Error already shown via toast
-            }
-        });
+                if (!network) {
+                    showToast('Vui lòng chọn nhà mạng', 'warning');
+                    return;
+                }
+                if (!type) {
+                    showToast('Vui lòng chọn loại SIM', 'warning');
+                    return;
+                }
+
+                const simData = { number, phone_number: number, network, type, sim_type: type, price, status, notes };
+
+                try {
+                    if (state.editTargetId) {
+                        await updateSim(state.editTargetId, simData);
+                    } else {
+                        await createSim(simData);
+                    }
+                    modal.classList.add('hidden');
+                } catch (err) {
+                    // Error shown
+                }
+            });
+        }
     }
 
     function openEditModal(id) {
-        const sim = state.sims.find(s => (s._id || s.id) === id);
-        if (!sim) return;
+        const targetId = String(id);
+        const sim = state.sims.find(s => getSimId(s) === targetId);
+        if (!sim) {
+            console.warn('SIM not found for edit ID:', id);
+            return;
+        }
 
-        state.editTargetId = id;
+        state.editTargetId = targetId;
         $('#modal-sim-title').innerHTML = '<i class="fas fa-edit"></i> Chỉnh sửa SIM';
-        $('#sim-number').value = sim.number || sim.phone || '';
+        $('#sim-number').value = getSimPhone(sim);
         $('#sim-network').value = sim.network || '';
-        $('#sim-type').value = sim.type || '';
+        $('#sim-type').value = getSimType(sim);
         $('#sim-price').value = sim.price || '';
         $('#sim-status').value = sim.status || 'Còn hàng';
         $('#sim-notes').value = sim.notes || '';
@@ -827,31 +896,38 @@
     function initDeleteModal() {
         const modal = $('#modal-delete');
 
-        $('#modal-delete-close').addEventListener('click', () => modal.classList.add('hidden'));
-        $('#modal-delete-cancel').addEventListener('click', () => modal.classList.add('hidden'));
+        if ($('#modal-delete-close')) $('#modal-delete-close').addEventListener('click', () => modal.classList.add('hidden'));
+        if ($('#modal-delete-cancel')) $('#modal-delete-cancel').addEventListener('click', () => modal.classList.add('hidden'));
         modal.addEventListener('click', (e) => {
             if (e.target === modal) modal.classList.add('hidden');
         });
 
-        $('#modal-delete-confirm').addEventListener('click', async () => {
-            if (state.deleteTargetId) {
-                try {
-                    await deleteSim(state.deleteTargetId);
-                    modal.classList.add('hidden');
-                    state.selectedSims.delete(state.deleteTargetId);
-                } catch (err) {
-                    // Error already shown
+        const confirmBtn = $('#modal-delete-confirm');
+        if (confirmBtn) {
+            confirmBtn.addEventListener('click', async () => {
+                if (state.deleteTargetId) {
+                    try {
+                        await deleteSim(state.deleteTargetId);
+                        modal.classList.add('hidden');
+                        state.selectedSims.delete(String(state.deleteTargetId));
+                    } catch (err) {
+                        // Error shown
+                    }
                 }
-            }
-        });
+            });
+        }
     }
 
     function openDeleteModal(id) {
-        const sim = state.sims.find(s => (s._id || s.id) === id);
-        if (!sim) return;
+        const targetId = String(id);
+        const sim = state.sims.find(s => getSimId(s) === targetId);
+        if (!sim) {
+            console.warn('SIM not found for delete ID:', id);
+            return;
+        }
 
-        state.deleteTargetId = id;
-        $('#delete-sim-number').textContent = formatPhoneDisplay(sim.number || sim.phone || '');
+        state.deleteTargetId = targetId;
+        $('#delete-sim-number').textContent = formatPhoneDisplay(getSimPhone(sim));
         $('#modal-delete').classList.remove('hidden');
     }
 
@@ -860,84 +936,87 @@
     // =============================================
     function initImportModal() {
         const modal = $('#modal-import');
+        const importBtn = $('#btn-bulk-import');
+        if (importBtn) {
+            importBtn.addEventListener('click', () => {
+                $('#import-csv').value = '';
+                $('#import-preview').classList.add('hidden');
+                $('#btn-do-import').disabled = true;
+                modal.classList.remove('hidden');
+            });
+        }
 
-        $('#btn-bulk-import').addEventListener('click', () => {
-            $('#import-csv').value = '';
-            $('#import-preview').classList.add('hidden');
-            $('#btn-do-import').disabled = true;
-            modal.classList.remove('hidden');
-        });
-
-        $('#modal-import-close').addEventListener('click', () => modal.classList.add('hidden'));
-        $('#modal-import-cancel').addEventListener('click', () => modal.classList.add('hidden'));
+        if ($('#modal-import-close')) $('#modal-import-close').addEventListener('click', () => modal.classList.add('hidden'));
+        if ($('#modal-import-cancel')) $('#modal-import-cancel').addEventListener('click', () => modal.classList.add('hidden'));
         modal.addEventListener('click', (e) => {
             if (e.target === modal) modal.classList.add('hidden');
         });
 
-        $('#btn-preview-import').addEventListener('click', () => {
-            const csv = $('#import-csv').value.trim();
-            if (!csv) {
-                showToast('Vui lòng dán dữ liệu CSV', 'warning');
-                return;
-            }
-
-            const lines = csv.split('\n').filter(l => l.trim());
-            const parsed = [];
-            const previewList = $('#import-preview-list');
-            previewList.innerHTML = '';
-
-            lines.forEach((line, idx) => {
-                const parts = line.split(',').map(p => p.trim());
-                if (parts.length < 4) {
-                    previewList.innerHTML += `<div class="import-row error">Dòng ${idx + 1}: Thiếu dữ liệu - "${line}"</div>`;
+        const previewBtn = $('#btn-preview-import');
+        if (previewBtn) {
+            previewBtn.addEventListener('click', () => {
+                const csv = $('#import-csv').value.trim();
+                if (!csv) {
+                    showToast('Vui lòng dán dữ liệu CSV', 'warning');
                     return;
                 }
 
-                const sim = {
-                    number: parts[0],
-                    network: parts[1],
-                    type: parts[2],
-                    price: parseInt(parts[3]) || 0,
-                    status: parts[4] || 'Còn hàng'
-                };
+                const lines = csv.split('\n').filter(l => l.trim());
+                const parsed = [];
+                const previewList = $('#import-preview-list');
+                previewList.innerHTML = '';
 
-                // Validate network
-                if (!NETWORKS.includes(sim.network)) {
-                    previewList.innerHTML += `<div class="import-row error">Dòng ${idx + 1}: Nhà mạng không hợp lệ "${sim.network}"</div>`;
-                    return;
-                }
+                lines.forEach((line, idx) => {
+                    const parts = line.split(',').map(p => p.trim());
+                    if (parts.length < 4) {
+                        previewList.innerHTML += `<div class="import-row error">Dòng ${idx + 1}: Thiếu dữ liệu - "${line}"</div>`;
+                        return;
+                    }
 
-                parsed.push(sim);
-                previewList.innerHTML += `
-                    <div class="import-row">
-                        <span>${formatPhoneDisplay(sim.number)}</span>
-                        <span>${sim.network}</span>
-                        <span>${sim.type}</span>
-                        <span>${formatPrice(sim.price)}</span>
-                        <span>${sim.status}</span>
-                    </div>
-                `;
+                    const sim = {
+                        number: parts[0],
+                        phone_number: parts[0],
+                        network: parts[1],
+                        type: parts[2],
+                        sim_type: parts[2],
+                        price: parseInt(parts[3]) || 0,
+                        status: parts[4] || 'Còn hàng',
+                        notes: parts[5] || ''
+                    };
+
+                    parsed.push(sim);
+                    previewList.innerHTML += `
+                        <div class="import-row">
+                            <span>${formatPhoneDisplay(sim.number)}</span>
+                            <span>${sim.network}</span>
+                            <span>${sim.type}</span>
+                            <span>${formatPrice(sim.price)}</span>
+                            <span>${sim.status}</span>
+                        </div>
+                    `;
+                });
+
+                $('#import-count').textContent = parsed.length;
+                $('#import-preview').classList.remove('hidden');
+                $('#btn-do-import').disabled = parsed.length === 0;
+                modal._parsedData = parsed;
             });
+        }
 
-            $('#import-count').textContent = parsed.length;
-            $('#import-preview').classList.remove('hidden');
-            $('#btn-do-import').disabled = parsed.length === 0;
+        const doImportBtn = $('#btn-do-import');
+        if (doImportBtn) {
+            doImportBtn.addEventListener('click', async () => {
+                const data = modal._parsedData;
+                if (!data || data.length === 0) return;
 
-            // Store parsed data
-            modal._parsedData = parsed;
-        });
-
-        $('#btn-do-import').addEventListener('click', async () => {
-            const data = modal._parsedData;
-            if (!data || data.length === 0) return;
-
-            try {
-                await bulkImportSims(data);
-                modal.classList.add('hidden');
-            } catch (err) {
-                // Error already shown
-            }
-        });
+                try {
+                    await bulkImportSims(data);
+                    modal.classList.add('hidden');
+                } catch (err) {
+                    // Error shown
+                }
+            });
+        }
     }
 
     // =============================================
@@ -952,57 +1031,62 @@
                 card.classList.add('active');
                 state.zaloTemplate = card.dataset.template;
 
-                // Show/hide sale options
                 if (state.zaloTemplate === 'sale') {
-                    $('#sale-options-card').classList.remove('hidden');
+                    if ($('#sale-options-card')) $('#sale-options-card').classList.remove('hidden');
                 } else {
-                    $('#sale-options-card').classList.add('hidden');
+                    if ($('#sale-options-card')) $('#sale-options-card').classList.add('hidden');
                 }
 
                 generateZaloPreview();
             });
         });
 
-        // Zalo SIM search
-        $('#zalo-sim-search').addEventListener('input', debounce((e) => {
-            renderZaloSimList(e.target.value);
-        }, 200));
+        const searchInput = $('#zalo-sim-search');
+        if (searchInput) {
+            searchInput.addEventListener('input', debounce((e) => {
+                renderZaloSimList(e.target.value);
+            }, 200));
+        }
 
-        // Discount change
-        $('#sale-discount').addEventListener('input', () => generateZaloPreview());
+        const discountInput = $('#sale-discount');
+        if (discountInput) {
+            discountInput.addEventListener('input', () => generateZaloPreview());
+        }
 
-        // Copy button
-        $('#btn-copy-post').addEventListener('click', () => {
-            const preview = $('#post-preview');
-            const text = preview.textContent || preview.innerText;
-            if (!text || text === 'Chọn mẫu và SIM để xem trước bài đăng') {
-                showToast('Chưa có bài đăng để sao chép', 'warning');
-                return;
-            }
+        const copyBtn = $('#btn-copy-post');
+        if (copyBtn) {
+            copyBtn.addEventListener('click', () => {
+                const preview = $('#post-preview');
+                const text = preview.textContent || preview.innerText;
+                if (!text || text === 'Chọn mẫu và SIM để xem trước bài đăng') {
+                    showToast('Chưa có bài đăng để sao chép', 'warning');
+                    return;
+                }
 
-            navigator.clipboard.writeText(text).then(() => {
-                showToast('Đã sao chép bài đăng!', 'success');
-            }).catch(() => {
-                // Fallback
-                const textarea = document.createElement('textarea');
-                textarea.value = text;
-                document.body.appendChild(textarea);
-                textarea.select();
-                document.execCommand('copy');
-                document.body.removeChild(textarea);
-                showToast('Đã sao chép bài đăng!', 'success');
+                navigator.clipboard.writeText(text).then(() => {
+                    showToast('Đã sao chép bài đăng!', 'success');
+                }).catch(() => {
+                    const textarea = document.createElement('textarea');
+                    textarea.value = text;
+                    document.body.appendChild(textarea);
+                    textarea.select();
+                    document.execCommand('copy');
+                    document.body.removeChild(textarea);
+                    showToast('Đã sao chép bài đăng!', 'success');
+                });
             });
-        });
+        }
     }
 
     function renderZaloSimList(searchQuery = '') {
         const container = $('#zalo-sim-list');
+        if (!container) return;
         let availableSims = state.sims.filter(s => s.status === 'Còn hàng');
 
         if (searchQuery) {
             const q = searchQuery.replace(/\D/g, '');
             availableSims = availableSims.filter(s => {
-                const num = (s.number || s.phone || '').replace(/\D/g, '');
+                const num = getSimPhone(s).replace(/\D/g, '');
                 return num.includes(q);
             });
         }
@@ -1018,33 +1102,32 @@
         }
 
         container.innerHTML = availableSims.map(sim => {
-            const id = sim._id || sim.id;
-            const isSelected = state.zaloSelectedSims.some(s => (s._id || s.id) === id);
+            const id = getSimId(sim);
+            const isSelected = state.zaloSelectedSims.some(s => getSimId(s) === id);
             return `
                 <div class="zalo-sim-item ${isSelected ? 'selected' : ''}" data-id="${id}">
                     <input type="checkbox" ${isSelected ? 'checked' : ''} style="accent-color:var(--primary)">
-                    <span class="sim-num">${formatPhoneDisplay(sim.number || sim.phone || '')}</span>
+                    <span class="sim-num">${formatPhoneDisplay(getSimPhone(sim))}</span>
                     <span class="sim-net">${sim.network || ''}</span>
                     <span class="sim-pr">${formatPrice(sim.price)}</span>
                 </div>
             `;
         }).join('');
 
-        // Click events
         container.querySelectorAll('.zalo-sim-item').forEach(item => {
             item.addEventListener('click', () => {
-                const id = item.dataset.id;
-                const sim = state.sims.find(s => (s._id || s.id) === id);
+                const id = String(item.dataset.id);
+                const sim = state.sims.find(s => getSimId(s) === id);
                 if (!sim) return;
 
-                const idx = state.zaloSelectedSims.findIndex(s => (s._id || s.id) === id);
+                const idx = state.zaloSelectedSims.findIndex(s => getSimId(s) === id);
                 if (idx >= 0) {
                     state.zaloSelectedSims.splice(idx, 1);
                 } else {
                     state.zaloSelectedSims.push(sim);
                 }
 
-                renderZaloSimList($('#zalo-sim-search').value);
+                renderZaloSimList($('#zalo-sim-search') ? $('#zalo-sim-search').value : '');
                 renderZaloSelectedChips();
                 generateZaloPreview();
             });
@@ -1053,11 +1136,13 @@
 
     function renderZaloSelectedChips() {
         const container = $('#zalo-selected-sims');
+        if (!container) return;
+
         container.innerHTML = state.zaloSelectedSims.map(sim => {
-            const id = sim._id || sim.id;
+            const id = getSimId(sim);
             return `
                 <span class="zalo-selected-chip">
-                    ${formatPhoneDisplay(sim.number || sim.phone || '')}
+                    ${formatPhoneDisplay(getSimPhone(sim))}
                     <i class="fas fa-times chip-remove" data-id="${id}"></i>
                 </span>
             `;
@@ -1066,9 +1151,9 @@
         container.querySelectorAll('.chip-remove').forEach(btn => {
             btn.addEventListener('click', (e) => {
                 e.stopPropagation();
-                const id = btn.dataset.id;
-                state.zaloSelectedSims = state.zaloSelectedSims.filter(s => (s._id || s.id) !== id);
-                renderZaloSimList($('#zalo-sim-search').value);
+                const id = String(btn.dataset.id);
+                state.zaloSelectedSims = state.zaloSelectedSims.filter(s => getSimId(s) !== id);
+                renderZaloSimList($('#zalo-sim-search') ? $('#zalo-sim-search').value : '');
                 renderZaloSelectedChips();
                 generateZaloPreview();
             });
@@ -1078,11 +1163,13 @@
     function generateZaloPreview() {
         const preview = $('#post-preview');
         const copyBtn = $('#btn-copy-post');
+        if (!preview) return;
+
         const sims = state.zaloSelectedSims;
 
         if (sims.length === 0) {
             preview.innerHTML = '<p class="preview-placeholder">Chọn mẫu và SIM để xem trước bài đăng</p>';
-            copyBtn.disabled = true;
+            if (copyBtn) copyBtn.disabled = true;
             return;
         }
 
@@ -1109,14 +1196,14 @@
         }
 
         preview.textContent = text;
-        copyBtn.disabled = false;
+        if (copyBtn) copyBtn.disabled = false;
     }
 
     function generateSinglePost(sim) {
         if (!sim) return '';
-        const phone = formatPhoneDisplay(sim.number || sim.phone || '');
+        const phone = formatPhoneDisplay(getSimPhone(sim));
         const network = sim.network || '';
-        const type = sim.type || 'Số đẹp';
+        const type = getSimType(sim) || 'Số đẹp';
         const price = formatPrice(sim.price);
 
         return `🔥🔥🔥 SIM SỐ ĐẸP 🔥🔥🔥
@@ -1136,7 +1223,7 @@
         const numEmojis = ['1️⃣', '2️⃣', '3️⃣', '4️⃣', '5️⃣', '6️⃣', '7️⃣', '8️⃣', '9️⃣', '🔟'];
 
         let lines = sims.map((sim, idx) => {
-            const phone = formatPhoneDisplay(sim.number || sim.phone || '');
+            const phone = formatPhoneDisplay(getSimPhone(sim));
             const network = sim.network || '';
             const price = formatPrice(sim.price);
             const emoji = numEmojis[idx] || `${idx + 1}.`;
@@ -1153,10 +1240,10 @@ ${lines.join('\n')}
 
     function generateSalePost(sims) {
         if (!sims.length) return '';
-        const discount = parseInt($('#sale-discount').value) || 30;
+        const discount = parseInt($('#sale-discount') ? $('#sale-discount').value : 30) || 30;
 
         let simLines = sims.map(sim => {
-            const phone = formatPhoneDisplay(sim.number || sim.phone || '');
+            const phone = formatPhoneDisplay(getSimPhone(sim));
             const originalPrice = sim.price || 0;
             const salePrice = Math.round(originalPrice * (1 - discount / 100));
             return `📱 ${phone}
@@ -1175,7 +1262,7 @@ ${simLines.join('\n\n')}
 
     function generateCongratsPost(sim) {
         if (!sim) return '';
-        const phone = formatPhoneDisplay(sim.number || sim.phone || '');
+        const phone = formatPhoneDisplay(getSimPhone(sim));
 
         return `🎊🎊 CHÚC MỪNG 🎊🎊
 ━━━━━━━━━━━━━━━
@@ -1190,7 +1277,7 @@ ${simLines.join('\n\n')}
         if (!sims.length) return '';
 
         let simLines = sims.map(sim => {
-            const phone = formatPhoneDisplay(sim.number || sim.phone || '');
+            const phone = formatPhoneDisplay(getSimPhone(sim));
             const network = sim.network || '';
             const price = formatPrice(sim.price);
             return `📱 ${phone} - ${network} - ${price}`;
@@ -1218,15 +1305,12 @@ ${simLines.join('\n')}
         initSelectionActions();
         initZaloTemplates();
 
-        // Auto-detect mobile view mode
         if (window.innerWidth < 768) {
             state.viewMode = 'cards';
         }
 
-        // Fetch initial data
         fetchSims();
 
-        // Handle window resize for view adjustments
         window.addEventListener('resize', debounce(() => {
             if (window.innerWidth < 768) {
                 state.viewMode = 'cards';
@@ -1235,7 +1319,6 @@ ${simLines.join('\n')}
         }, 200));
     }
 
-    // Start app when DOM is ready
     if (document.readyState === 'loading') {
         document.addEventListener('DOMContentLoaded', init);
     } else {
