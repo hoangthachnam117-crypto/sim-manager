@@ -1244,21 +1244,6 @@
             });
         });
     }
-        grid.querySelectorAll('.btn-edit').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openEditModal(btn.dataset.id);
-            });
-        });
-        grid.querySelectorAll('.btn-delete').forEach(btn => {
-            btn.addEventListener('click', (e) => {
-                e.preventDefault();
-                e.stopPropagation();
-                openDeleteModal(btn.dataset.id);
-            });
-        });
-    }
 
     function renderPagination(totalPages) {
         const container = $('#pagination');
