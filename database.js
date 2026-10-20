@@ -397,6 +397,21 @@ function deleteSim(id) {
 }
 
 /**
+ * Xóa SIM hàng loạt
+ */
+function bulkDeleteSims(ids) {
+  if (!Array.isArray(ids) || ids.length === 0) return 0;
+  const targetIds = new Set(ids.map(id => String(id)));
+  const beforeCount = data.sims.length;
+  data.sims = data.sims.filter(s => !targetIds.has(String(s.id)));
+  const deletedCount = beforeCount - data.sims.length;
+  if (deletedCount > 0) {
+    saveData(data);
+  }
+  return deletedCount;
+}
+
+/**
  * Nhập SIM hàng loạt từ dữ liệu CSV
  * Định dạng: phone_number,network,sim_type,price,status,notes
  */
@@ -526,6 +541,7 @@ module.exports = {
   createSim,
   updateSim,
   deleteSim,
+  bulkDeleteSims,
   bulkImportSims,
   getStats,
   getTemplates,

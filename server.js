@@ -354,6 +354,29 @@ app.delete('/api/sims/:id', (req, res) => {
 });
 
 /**
+ * POST /api/sims/bulk-delete
+ * Xóa hàng loạt SIM theo danh sách ID
+ */
+app.post('/api/sims/bulk-delete', (req, res) => {
+  try {
+    const { ids } = req.body;
+    if (!ids || !Array.isArray(ids) || ids.length === 0) {
+      return res.status(400).json({ success: false, error: 'Cần chọn ít nhất 1 SIM để xóa' });
+    }
+
+    const count = database.bulkDeleteSims(ids);
+    res.json({
+      success: true,
+      message: `Đã xóa ${count} SIM thành công`,
+      deleted_count: count
+    });
+  } catch (err) {
+    console.error('❌ Lỗi xóa SIM hàng loạt:', err.message);
+    res.status(500).json({ success: false, error: 'Lỗi server khi xóa SIM hàng loạt' });
+  }
+});
+
+/**
  * POST /api/sims/bulk
  * Nhập SIM hàng loạt từ dữ liệu CSV
  *

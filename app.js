@@ -409,6 +409,25 @@
         }
     }
 
+    async function bulkDeleteSims(ids) {
+        try {
+            showLoading();
+            const result = await apiRequest(`${API_BASE}/bulk-delete`, {
+                method: 'POST',
+                body: JSON.stringify({ ids })
+            });
+            showToast(result.message || `Đã xóa ${ids.length} SIM thành công!`, 'success');
+            state.selectedSims.clear();
+            await fetchSims();
+            return result;
+        } catch (err) {
+            showToast('Lỗi xóa SIM hàng loạt: ' + err.message, 'error');
+            throw err;
+        } finally {
+            hideLoading();
+        }
+    }
+
     async function bulkImportSims(simsArray) {
         try {
             showLoading();
@@ -697,7 +716,9 @@
         const hasSelection = state.selectedSims.size > 0;
         if ($('#btn-select-all')) $('#btn-select-all').style.display = total > 0 ? '' : 'none';
         if ($('#btn-post-selected')) $('#btn-post-selected').style.display = hasSelection ? '' : 'none';
+        if ($('#btn-delete-selected')) $('#btn-delete-selected').style.display = hasSelection ? '' : 'none';
         if ($('#selected-count')) $('#selected-count').textContent = state.selectedSims.size;
+        if ($('#delete-selected-count')) $('#delete-selected-count').textContent = state.selectedSims.size;
 
         const emptyEl = $('#manage-empty');
         if (total === 0) {
@@ -928,6 +949,20 @@
                 switchPage('zalo', '<i class="fas fa-share-alt"></i> Đăng Zalo');
                 renderZaloSelectedChips();
                 generateZaloPreview();
+            });
+        }
+
+        const deleteSelectedBtn = $('#btn-delete-selected');
+        if (deleteSelectedBtn) {
+            deleteSelectedBtn.addEventListener('click', () => {
+                if (state.selectedSims.size === 0) return;
+                state.isBulkDelete = true;
+                const count = state.selectedSims.size;
+                const modal = $('#modal-delete');
+                if ($('#delete-confirm-message')) {
+                    $('#delete-confirm-message').innerHTML = `Bạn có chắc chắn muốn xóa <strong style="color:#ea4335;">${count} SIM</strong> đã chọn?`;
+                }
+                modal.classList.remove('hidden');
             });
         }
 
@@ -1169,7 +1204,16 @@
         const confirmBtn = $('#modal-delete-confirm');
         if (confirmBtn) {
             confirmBtn.addEventListener('click', async () => {
-                if (state.deleteTargetId) {
+                if (state.isBulkDelete) {
+                    const ids = Array.from(state.selectedSims);
+                    try {
+                        await bulkDeleteSims(ids);
+                        modal.classList.add('hidden');
+                        state.isBulkDelete = false;
+                    } catch (err) {
+                        // Error shown
+                    }
+                } else if (state.deleteTargetId) {
                     try {
                         await deleteSim(state.deleteTargetId);
                         modal.classList.add('hidden');
@@ -1183,6 +1227,7 @@
     }
 
     function openDeleteModal(id) {
+        state.isBulkDelete = false;
         const targetId = String(id);
         const sim = state.sims.find(s => getSimId(s) === targetId);
         if (!sim) {
@@ -1191,7 +1236,9 @@
         }
 
         state.deleteTargetId = targetId;
-        $('#delete-sim-number').textContent = formatPhoneDisplay(getSimPhone(sim));
+        if ($('#delete-confirm-message')) {
+            $('#delete-confirm-message').innerHTML = `Bạn có chắc chắn muốn xóa SIM <strong id="delete-sim-number">${formatPhoneDisplay(getSimPhone(sim))}</strong>?`;
+        }
         $('#modal-delete').classList.remove('hidden');
     }
 
